@@ -22,12 +22,20 @@ const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 const botManager = new BotManager();
 
-// Load proxies if file exists
-const proxyFile = process.env.PROXY_FILE || path.join(__dirname, 'proxies.txt');
-const loaded = botManager.proxyPool.loadFromFile(proxyFile);
-if (loaded === 0) {
-  console.log('[Server] No proxies loaded — bots will connect directly (likely to get rate-limited)');
-  console.log('[Server] Add proxies to server/proxies.txt (one per line: socks5://user:pass@host:port)');
+// Load proxies from env var (for Railway/cloud) or file (for local)
+// PROXY_LIST env: comma-separated proxy URLs
+// PROXY_FILE env or proxies.txt: one proxy per line
+if (process.env.PROXY_LIST) {
+  const urls = process.env.PROXY_LIST.split(',').map(s => s.trim()).filter(Boolean);
+  botManager.proxyPool.addProxies(urls);
+  console.log(`[Server] Loaded ${urls.length} proxies from PROXY_LIST env`);
+} else {
+  const proxyFile = process.env.PROXY_FILE || path.join(__dirname, 'proxies.txt');
+  const loaded = botManager.proxyPool.loadFromFile(proxyFile);
+  if (loaded === 0) {
+    console.log('[Server] No proxies loaded — bots will connect directly (likely to get rate-limited)');
+    console.log('[Server] Set PROXY_LIST env or add proxies to server/proxies.txt');
+  }
 }
 
 // ---------------------------------------------------------------------------
