@@ -1046,21 +1046,13 @@ static NSString *formatMass(float mass) {
 
 %group VisualMods
 
-%hook BaseArenaState
+%hook LeaderboardWidget
 
-- (void)onEnter {
+- (void)updateLeaderboard:(id)data {
+    if (g_modEnabled && g_hideProfilePics) {
+        return;
+    }
     %orig;
-
-    if (!g_modEnabled) return;
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self applyVisualMods];
-    });
-}
-
-%new
-- (void)applyVisualMods {
-    // Visual mod application is deferred to ensure UI hierarchy is ready
 }
 
 %end
@@ -1147,35 +1139,26 @@ static NSString *formatMass(float mass) {
 // HOOKS — %group FPSUnlockDisplay — CADisplayLink / MTKView unlock
 // ============================================================================
 
+static void unlockFPSInViewHierarchy(UIView *view) {
+    if (!view) return;
+    if ([view isKindOfClass:[MTKView class]]) {
+        ((MTKView *)view).preferredFramesPerSecond = 120;
+        NSLog(@"[AgarMod] MTKView FPS set to 120");
+        return;
+    }
+    for (UIView *subview in view.subviews) {
+        unlockFPSInViewHierarchy(subview);
+    }
+}
+
 %group FPSUnlockDisplay
 
-// Hook UIViewController to set preferred FPS on any view controller that
-// manages a Metal or GL view
 %hook UIViewController
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-
     if (!g_modEnabled || !g_unlockFPS) return;
-
-    // Try to find an MTKView in the hierarchy and unlock its FPS
-    [self unlockFPSForView:self.view];
-}
-
-%new
-- (void)unlockFPSForView:(UIView *)view {
-    if (!view) return;
-
-    if ([view isKindOfClass:NSClassFromString(@"MTKView")]) {
-        MTKView *mtkView = (MTKView *)view;
-        mtkView.preferredFramesPerSecond = 120;
-        NSLog(@"[AgarMod] MTKView FPS set to 120");
-        return;
-    }
-
-    for (UIView *subview in view.subviews) {
-        [self unlockFPSForView:subview];
-    }
+    unlockFPSInViewHierarchy(self.view);
 }
 
 %end

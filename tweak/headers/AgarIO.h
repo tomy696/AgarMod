@@ -346,6 +346,7 @@
 @property (nonatomic, assign) CGPoint position;
 @property (nonatomic, assign) CGSize contentSize;
 @property (nonatomic, assign) CGPoint anchorPoint;
+@property (nonatomic, assign) NSInteger tag;
 - (void)setColor:(id)color;
 - (void)addChild:(id)child;
 - (void)addChild:(id)child z:(int)z;
