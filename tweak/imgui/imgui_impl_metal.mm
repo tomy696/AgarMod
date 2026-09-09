@@ -6,6 +6,7 @@
 #import "imgui.h"
 
 #import <Metal/Metal.h>
+#import <QuartzCore/QuartzCore.h>
 #import <simd/simd.h>
 #import <time.h>
 
@@ -114,17 +115,17 @@ static bool ImGui_ImplMetal_CreatePipelineState(ImGui_ImplMetal_Data* bd) {
 
     // position: float2 at offset 0
     vertexDescriptor.attributes[0].format = MTLVertexFormatFloat2;
-    vertexDescriptor.attributes[0].offset = IM_OFFSETOF(ImDrawVert, pos);
+    vertexDescriptor.attributes[0].offset = offsetof(ImDrawVert, pos);
     vertexDescriptor.attributes[0].bufferIndex = 0;
 
     // texCoords: float2 at offset 8
     vertexDescriptor.attributes[1].format = MTLVertexFormatFloat2;
-    vertexDescriptor.attributes[1].offset = IM_OFFSETOF(ImDrawVert, uv);
+    vertexDescriptor.attributes[1].offset = offsetof(ImDrawVert, uv);
     vertexDescriptor.attributes[1].bufferIndex = 0;
 
     // color: uchar4 at offset 16
     vertexDescriptor.attributes[2].format = MTLVertexFormatUChar4Normalized;
-    vertexDescriptor.attributes[2].offset = IM_OFFSETOF(ImDrawVert, col);
+    vertexDescriptor.attributes[2].offset = offsetof(ImDrawVert, col);
     vertexDescriptor.attributes[2].bufferIndex = 0;
 
     vertexDescriptor.layouts[0].stride = sizeof(ImDrawVert);
@@ -303,7 +304,7 @@ void ImGui_ImplMetal_RenderDrawData(ImDrawData* drawData,
             [commandEncoder setScissorRect:scissorRect];
 
             // Bind texture
-            id<MTLTexture> texture = (__bridge id<MTLTexture>)(pcmd->GetTexID());
+            id<MTLTexture> texture = (__bridge id<MTLTexture>)(void*)(uintptr_t)(pcmd->GetTexID());
             if (texture) {
                 [commandEncoder setFragmentTexture:texture atIndex:0];
             }
