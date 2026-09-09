@@ -132,6 +132,27 @@
     agmod_reloadSettings();
 
     _imguiInitialized = YES;
+
+    // Add a floating toggle button so the user can show/hide the menu
+    UIButton *toggleBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    toggleBtn.frame = CGRectMake(10, 80, 44, 44);
+    toggleBtn.backgroundColor = [UIColor colorWithRed:0.4f green:0.2f blue:0.8f alpha:0.85f];
+    toggleBtn.layer.cornerRadius = 22;
+    toggleBtn.layer.borderWidth = 2;
+    toggleBtn.layer.borderColor = [UIColor colorWithRed:0.6f green:0.4f blue:1.0f alpha:1.0f].CGColor;
+    [toggleBtn setTitle:@"XRD" forState:UIControlStateNormal];
+    toggleBtn.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+    [toggleBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    toggleBtn.tag = 8880099;
+    [toggleBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
+
+    // Make it draggable
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleToggleDrag:)];
+    [toggleBtn addGestureRecognizer:pan];
+
+    [window addSubview:toggleBtn];
+    [window bringSubviewToFront:toggleBtn];
+
     NSLog(@"[ModMenu] ImGui overlay initialized successfully");
 }
 
@@ -192,6 +213,27 @@
 
 - (void)toggleMenu {
     _menuVisible = !_menuVisible;
+    _overlayView.userInteractionEnabled = _menuVisible;
+}
+
+- (void)handleToggleDrag:(UIPanGestureRecognizer *)pan {
+    UIView *btn = pan.view;
+    UIView *superview = btn.superview;
+    if (!btn || !superview) return;
+
+    CGPoint translation = [pan translationInView:superview];
+    btn.center = CGPointMake(btn.center.x + translation.x, btn.center.y + translation.y);
+    [pan setTranslation:CGPointZero inView:superview];
+
+    // Keep button on screen
+    if (pan.state == UIGestureRecognizerStateEnded) {
+        CGRect bounds = superview.bounds;
+        CGFloat x = btn.center.x;
+        CGFloat y = btn.center.y;
+        x = MAX(btn.frame.size.width/2, MIN(x, bounds.size.width - btn.frame.size.width/2));
+        y = MAX(btn.frame.size.height/2, MIN(y, bounds.size.height - btn.frame.size.height/2));
+        [UIView animateWithDuration:0.2 animations:^{ btn.center = CGPointMake(x, y); }];
+    }
 }
 
 #pragma mark - MTKViewDelegate
