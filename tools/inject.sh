@@ -163,15 +163,63 @@ if [[ "$HAS_REAL_BINARY" == "false" ]]; then
     if [[ -n "$SUBSTRATE_BIN" && -f "$SUBSTRATE_BIN" ]]; then
         info "Copying real CydiaSubstrate binary from: $SUBSTRATE_BIN"
         cp "$SUBSTRATE_BIN" "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate"
+
+        # Ensure arm64 — strip armv7 from fat binaries (modern iPhones are all arm64)
+        if lipo -info "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" 2>/dev/null | grep -q "armv7"; then
+            if lipo -info "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" 2>/dev/null | grep -q "arm64"; then
+                info "Fat binary detected, extracting arm64 slice..."
+                lipo -thin arm64 "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" \
+                     -output "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate.arm64"
+                mv "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate.arm64" \
+                   "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate"
+            fi
+        fi
+
         ok "CydiaSubstrate binary bundled"
     else
-        # Copy the Theos stub framework structure (headers, Info.plist) but warn about missing binary
         if [[ -d "${THEOS:-}/vendor/lib/CydiaSubstrate.framework" ]]; then
             cp -R "${THEOS}/vendor/lib/CydiaSubstrate.framework/"* "$FRAMEWORKS_DIR/CydiaSubstrate.framework/"
         fi
         warn "No real CydiaSubstrate binary found! The IPA will crash on launch."
         warn "Set SUBSTRATE_BIN env var to the path of the real CydiaSubstrate Mach-O binary."
     fi
+fi
+
+# iOS requires Info.plist in every .framework bundle or installd rejects the IPA
+if [[ -d "$FRAMEWORKS_DIR/CydiaSubstrate.framework" ]] && \
+   [[ ! -f "$FRAMEWORKS_DIR/CydiaSubstrate.framework/Info.plist" ]]; then
+    info "Creating Info.plist for CydiaSubstrate.framework..."
+    cat > "$FRAMEWORKS_DIR/CydiaSubstrate.framework/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>English</string>
+    <key>CFBundleExecutable</key>
+    <string>CydiaSubstrate</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.saurik.substrate</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>CydiaSubstrate</string>
+    <key>CFBundlePackageType</key>
+    <string>FMWK</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.9.7113</string>
+    <key>CFBundleVersion</key>
+    <string>0.9.7113</string>
+    <key>MinimumOSVersion</key>
+    <string>12.0</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>iPhoneOS</string>
+    </array>
+</dict>
+</plist>
+PLIST
+    ok "Info.plist created for CydiaSubstrate.framework"
 fi
 
 # ── Fix install names for sideloading ────────────────────────────────────────
@@ -210,7 +258,7 @@ info "Injecting load command: ${BOLD}${LOAD_PATH}${RESET}"
 if [[ "$INJECT_TOOL" == "optool" ]]; then
     optool install -c load -p "$LOAD_PATH" -t "$MAIN_BINARY"
 elif [[ "$INJECT_TOOL" == "insert_dylib" ]]; then
-    insert_dylib --inplace --no-strip-codesig "$LOAD_PATH" "$MAIN_BINARY"
+    insert_dylib --inplace --strip-codesig "$LOAD_PATH" "$MAIN_BINARY"
 fi
 ok "Load command injected"
 
@@ -223,7 +271,27 @@ find "$APP_DIR" -name '_CodeSignature' -type d -exec rm -rf {} + 2>/dev/null || 
 # Remove embedded.mobileprovision if present (KSign/Sideloadly inject their own)
 rm -f "$APP_DIR/embedded.mobileprovision"
 
+# Also strip LC_CODE_SIGNATURE from Mach-O binaries so signing tools start clean
+if command -v codesign &>/dev/null; then
+    find "$FRAMEWORKS_DIR" -type f \( -name '*.dylib' -o -name 'CydiaSubstrate' \) \
+        -exec codesign --remove-signature {} \; 2>/dev/null || true
+    codesign --remove-signature "$MAIN_BINARY" 2>/dev/null || true
+fi
+
 ok "Signatures stripped — IPA ready for KSign/Sideloadly/AltStore signing"
+
+# ── Diagnostics ─────────────────────────────────────────────────────────────
+info "IPA diagnostics:"
+echo "  Frameworks contents:"
+ls -la "$FRAMEWORKS_DIR/" 2>/dev/null || true
+echo "  CydiaSubstrate.framework contents:"
+ls -la "$FRAMEWORKS_DIR/CydiaSubstrate.framework/" 2>/dev/null || true
+echo "  Binary architectures:"
+for bin in "$MAIN_BINARY" "$FRAMEWORKS_DIR/$DYLIB_NAME" "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate"; do
+    if [[ -f "$bin" ]]; then
+        echo "    $(basename "$bin"): $(lipo -info "$bin" 2>&1 || file "$bin")"
+    fi
+done
 
 # ── Re-package IPA ───────────────────────────────────────────────────────────
 info "Re-packaging IPA..."
@@ -233,5 +301,4 @@ popd >/dev/null
 
 ok "Modded IPA created: ${BOLD}${OUTPUT_IPA}${RESET}"
 echo ""
-echo -e "${GREEN}${BOLD}Done!${RESET} Install the IPA with your preferred sideloading tool."
-echo -e "  - TrollStore, AltStore, Sideloadly, etc."
+echo -e "${GREEN}${BOLD}Done!${RESET} Sign with KSign/Sideloadly/AltStore and install."
