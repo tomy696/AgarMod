@@ -3,6 +3,7 @@
 const BotClient = require('./bot-client');
 const { BOT_STATES } = require('./bot-client');
 const ProxyPool = require('./proxy-pool');
+const proto = require('./protocol');
 
 // =============================================================================
 // bot-manager.js — Manages multiple bot instances per session
@@ -33,7 +34,7 @@ class BotManager {
    * @param {number} [config.targetY]
    * @returns {{ botsStarted: number }}
    */
-  startBots(config) {
+  async startBots(config) {
     const {
       sessionId,
       targetIP,
@@ -50,19 +51,37 @@ class BotManager {
     }
 
     const count = Math.max(1, Math.min(100, botCount));
+
+    // Resolve server URL ONCE via bouncer (instead of each bot calling individually)
+    let resolvedUrl = targetIP;
+    const isRegion = !targetIP.startsWith('ws') && !targetIP.includes('/') && !targetIP.includes('.');
+    if (isRegion) {
+      try {
+        console.log(`[BotManager] Resolving server for region=${targetIP}, party=${partyCode || 'none'}, mode=${config.gameMode || 'ffa'}`);
+        const { server } = await proto.findServer(targetIP, config.gameMode || 'ffa', partyCode);
+        resolvedUrl = `wss://${server}`;
+        if (partyCode) {
+          resolvedUrl += (resolvedUrl.includes('?') ? '&' : '?') + `party_id=${partyCode}`;
+        }
+        console.log(`[BotManager] Resolved: ${resolvedUrl}`);
+      } catch (err) {
+        console.error(`[BotManager] Bouncer failed:`, err.message);
+        return { botsStarted: 0, error: err.message };
+      }
+    }
+
     const bots = new Map();
-    const proxiesUsed = new Map(); // botId -> proxy
-    const session = { bots, config: { ...config, botCount: count }, paused: false, proxiesUsed };
+    const proxiesUsed = new Map();
+    const session = { bots, config: { ...config, botCount: count, resolvedUrl }, paused: false, proxiesUsed };
     this.sessions.set(sessionId, session);
 
-    // Get proxies for this batch (one per bot, round-robin)
     const proxyStats = this.proxyPool.getStats();
     const proxies = proxyStats.total > 0
       ? this.proxyPool.getBatch(count)
       : [];
 
     const hasProxies = proxies.length > 0;
-    console.log(`[BotManager] Starting ${count} bots for session ${sessionId} -> ${targetIP} (${hasProxies ? proxies.length + ' proxies' : 'direct'})`);
+    console.log(`[BotManager] Starting ${count} bots for session ${sessionId} -> ${resolvedUrl} (${hasProxies ? proxies.length + ' proxies' : 'direct'})`);
 
     for (let i = 0; i < count; i++) {
       const botId = this._nextBotId++;
@@ -101,11 +120,11 @@ class BotManager {
 
       bots.set(botId, bot);
 
-      // Stagger 300-500ms apart (BiteYt pattern: avoid thundering herd)
-      const delay = i * (300 + Math.random() * 200);
+      // Stagger 200-400ms apart, pass resolved URL directly
+      const delay = i * (200 + Math.random() * 200);
       setTimeout(() => {
         if (this.sessions.has(sessionId) && bots.has(botId) && !session.paused) {
-          bot.connect(targetIP, proxy);
+          bot.connect(resolvedUrl, proxy);
         }
       }, delay);
     }
@@ -344,7 +363,8 @@ class BotManager {
 
       const b = sess.bots.get(botId);
       if (b.state === BOT_STATES.DISCONNECTED) {
-        b.connect(sess.config.targetIP, proxy);
+        // Use cached resolved URL so we don't hit the bouncer again
+        b.connect(sess.config.resolvedUrl || sess.config.targetIP, proxy);
       }
     }, delay);
   }

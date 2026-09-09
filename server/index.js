@@ -185,7 +185,7 @@ const REGION_TO_SERVER = {
   'me-south-1': 'me-south-1',
 };
 
-app.post('/botter2.php', (req, res) => {
+app.post('/botter2.php', async (req, res) => {
   const {
     action,
     state: stateParam,
@@ -235,7 +235,7 @@ app.post('/botter2.php', (req, res) => {
 
       console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'})`);
 
-      const result = botManager.startBots({
+      const result = await botManager.startBots({
         sessionId,
         targetIP: resolvedIP,
         mode,
