@@ -6,7 +6,9 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <dispatch/dispatch.h>
+#import <MetalKit/MetalKit.h>
 #import "headers/AgarIO.h"
+#import "ModMenuRenderer.h"
 
 // ============================================================================
 // GLOBAL STATE
@@ -615,47 +617,59 @@ static NSString *formatMass(float mass) {
     }
 
     float originalZoom = %orig;
-    float phoneRatio = [self calculatePhoneRatioForZoom];
 
-    switch (g_zoomMode) {
-        case 0: { // DynamicCell — scales with mass but allows more zoom out
-            float baseFactor = self.variableZoomBase;
-            float amplitude = self.variableZoomAmplitude;
-            float decay = self.variableZoomDecay;
+    @try {
+        float phoneRatio = 1.0f;
+        if ([self respondsToSelector:@selector(calculatePhoneRatioForZoom)])
+            phoneRatio = [self calculatePhoneRatioForZoom];
 
-            float dynamicZoom = baseFactor + amplitude * expf(-decay * mass);
-            float scaleFactor = [self getScaleFactorForNumberOfCells:cellAmount];
-            float modifiedZoom = dynamicZoom * scaleFactor * phoneRatio;
+        switch (g_zoomMode) {
+            case 0: { // DynamicCell
+                float baseFactor = 0.3f, amplitude = 0.5f, decay = 0.001f;
+                if ([self respondsToSelector:@selector(variableZoomBase)])
+                    baseFactor = self.variableZoomBase;
+                if ([self respondsToSelector:@selector(variableZoomAmplitude)])
+                    amplitude = self.variableZoomAmplitude;
+                if ([self respondsToSelector:@selector(variableZoomDecay)])
+                    decay = self.variableZoomDecay;
 
-            float lerpFactor = g_flexZoom;
-            float finalZoom = originalZoom * (1.0f - lerpFactor) + modifiedZoom * lerpFactor * 0.4f;
+                float dynamicZoom = baseFactor + amplitude * expf(-decay * mass);
+                float scaleFactor = [self getScaleFactorForNumberOfCells:cellAmount];
+                float modifiedZoom = dynamicZoom * scaleFactor * phoneRatio;
 
-            if (finalZoom < 0.05f) finalZoom = 0.05f;
-            if (finalZoom > 2.0f) finalZoom = 2.0f;
-            return finalZoom;
+                float lerpFactor = g_flexZoom;
+                float finalZoom = originalZoom * (1.0f - lerpFactor) + modifiedZoom * lerpFactor * 0.4f;
+
+                if (finalZoom < 0.05f) finalZoom = 0.05f;
+                if (finalZoom > 2.0f) finalZoom = 2.0f;
+                return finalZoom;
+            }
+
+            case 1: { // StableCell
+                float stableBase = 0.15f + (g_flexZoom * 0.35f);
+                float scaleFactor = [self getScaleFactorForNumberOfCells:cellAmount];
+                float stableZoom = stableBase * scaleFactor * phoneRatio;
+
+                if (stableZoom < 0.05f) stableZoom = 0.05f;
+                if (stableZoom > 1.5f) stableZoom = 1.5f;
+                return stableZoom;
+            }
+
+            case 2: { // SpeedCell
+                float speedBase = 0.08f + (g_flexZoom * 0.12f);
+                float speedZoom = speedBase * phoneRatio;
+
+                if (speedZoom < 0.03f) speedZoom = 0.03f;
+                if (speedZoom > 0.5f) speedZoom = 0.5f;
+                return speedZoom;
+            }
+
+            default:
+                return originalZoom;
         }
-
-        case 1: { // StableCell — fixed zoom regardless of mass
-            float stableBase = 0.15f + (g_flexZoom * 0.35f);
-            float scaleFactor = [self getScaleFactorForNumberOfCells:cellAmount];
-            float stableZoom = stableBase * scaleFactor * phoneRatio;
-
-            if (stableZoom < 0.05f) stableZoom = 0.05f;
-            if (stableZoom > 1.5f) stableZoom = 1.5f;
-            return stableZoom;
-        }
-
-        case 2: { // SpeedCell — very zoomed out for fast play
-            float speedBase = 0.08f + (g_flexZoom * 0.12f);
-            float speedZoom = speedBase * phoneRatio;
-
-            if (speedZoom < 0.03f) speedZoom = 0.03f;
-            if (speedZoom > 0.5f) speedZoom = 0.5f;
-            return speedZoom;
-        }
-
-        default:
-            return originalZoom;
+    } @catch (NSException *e) {
+        NSLog(@"[XRD] ZoomHack exception: %@", e);
+        return originalZoom;
     }
 }
 
@@ -1212,12 +1226,18 @@ static void unlockFPSInViewHierarchy(UIView *view) {
 
     if (!g_modEnabled || !g_showEnemyMass) return;
 
-    AgarCell *cell = self.cell;
-    if (!cell) return;
-    if (cell.isVirus) return;
+    id cellObj = nil;
+    if ([self respondsToSelector:@selector(cell)])
+        cellObj = [self performSelector:@selector(cell)];
+    if (!cellObj) return;
 
-    float mass = cell.mass;
-    if (mass < 10.0f) return; // Skip tiny food pellets
+    AgarCell *cell = (AgarCell *)cellObj;
+    if ([cell respondsToSelector:@selector(isVirus)] && cell.isVirus) return;
+
+    float mass = 0;
+    if ([cell respondsToSelector:@selector(mass)])
+        mass = cell.mass;
+    if (mass < 10.0f) return;
 
     // Check if this cell already has our mass label attached
     static const NSInteger kMassLabelTag = 8880001;
@@ -1391,11 +1411,15 @@ static void unlockFPSInViewHierarchy(UIView *view) {
     id result = %orig;
 
     if (g_modEnabled && g_showEnemyMass && result) {
-        // Track cell mass in our dictionary when a cell is created
-        AgarCell *cell = (AgarCell *)result;
-        if (cell.cellId > 0 && cell.mass > 0) {
-            g_enemyCellMasses[@(cell.cellId)] = @(cell.mass);
-        }
+        @try {
+            AgarCell *cell = (AgarCell *)result;
+            if ([cell respondsToSelector:@selector(cellId)] &&
+                [cell respondsToSelector:@selector(mass)]) {
+                if (cell.cellId > 0 && cell.mass > 0) {
+                    g_enemyCellMasses[@(cell.cellId)] = @(cell.mass);
+                }
+            }
+        } @catch (NSException *e) {}
     }
 
     return result;
@@ -1676,7 +1700,6 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
     @autoreleasepool {
         NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
 
-        // Only activate for the Agar.io app
         if (![bundleId isEqualToString:@"com.miniclip.agar.io"] &&
             ![bundleId hasPrefix:@"com.miniclip.agar"]) {
             return;
@@ -1684,30 +1707,117 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
 
         NSLog(@"[XRD] Loading tweak for bundle: %@", bundleId);
 
-        // Initialize settings first
-        [ModSettings shared];
+        @try {
+            [ModSettings shared];
 
-        // Initialize ALL hook groups unconditionally so features
-        // can be toggled at runtime without requiring an app restart.
-        %init(Core);
-        %init(GameplayCapture);
-        %init(ServerLoader);
-        %init(CellMassOverlay);
-        %init(ZoomHack);
-        %init(MassDisplay);
-        %init(EnemyMassRenderer);
-        %init(SkinUnlock);
-        %init(AutoContinue);
-        %init(FPSUnlock);
-        %init(FPSUnlockDisplay);
-        %init(FastMode);
-        %init(DarkMode);
-        %init(GridAndBorderHide);
-        %init(FriendTrackerHide);
-        %init(TokenCounterHide);
-        %init(VisualMods);
-        %init(ConnectionInterceptor);
+            // Core hooks AppDelegate — always exists
+            %init(Core);
+            // UIViewController — system class, always exists
+            %init(FPSUnlockDisplay);
 
-        NSLog(@"[XRD] All hook groups initialized");
+            // Only init groups whose target classes exist in this binary.
+            // All class names below are reconstructed guesses from the IPA.
+            // If they don't match the actual binary, skip the group entirely.
+
+            if (objc_getClass("GameplayWidget"))
+                %init(GameplayCapture);
+            else NSLog(@"[XRD] Skip GameplayCapture");
+
+            if (objc_getClass("GameplaySettings"))
+                %init(ZoomHack);
+            else NSLog(@"[XRD] Skip ZoomHack");
+
+            if (objc_getClass("AgarCell"))
+                %init(CellMassOverlay);
+            else NSLog(@"[XRD] Skip CellMassOverlay");
+
+            if (objc_getClass("ScoreWidget") || objc_getClass("BaseArenaState"))
+                %init(MassDisplay);
+            else NSLog(@"[XRD] Skip MassDisplay");
+
+            if (objc_getClass("AgarCellView"))
+                %init(EnemyMassRenderer);
+            else NSLog(@"[XRD] Skip EnemyMassRenderer");
+
+            if (objc_getClass("UserWallet"))
+                %init(SkinUnlock);
+            else NSLog(@"[XRD] Skip SkinUnlock");
+
+            if (objc_getClass("ContinueGame"))
+                %init(AutoContinue);
+            else NSLog(@"[XRD] Skip AutoContinue");
+
+            if (objc_getClass("BaseArenaView"))
+                %init(FPSUnlock);
+            else NSLog(@"[XRD] Skip FPSUnlock");
+
+            if (objc_getClass("AgarCellView") || objc_getClass("SoftBodyCellView"))
+                %init(FastMode);
+            else NSLog(@"[XRD] Skip FastMode");
+
+            if (objc_getClass("BaseArenaState"))
+                %init(DarkMode);
+            else NSLog(@"[XRD] Skip DarkMode");
+
+            if (objc_getClass("BaseArenaState"))
+                %init(GridAndBorderHide);
+            else NSLog(@"[XRD] Skip GridAndBorderHide");
+
+            if (objc_getClass("FriendTrackerWidget"))
+                %init(FriendTrackerHide);
+            else NSLog(@"[XRD] Skip FriendTrackerHide");
+
+            if (objc_getClass("CollectibleCounterWidget"))
+                %init(TokenCounterHide);
+            else NSLog(@"[XRD] Skip TokenCounterHide");
+
+            if (objc_getClass("OnlineArenaState"))
+                %init(ServerLoader);
+            else NSLog(@"[XRD] Skip ServerLoader");
+
+            if (objc_getClass("OnlineArenaState"))
+                %init(ConnectionInterceptor);
+            else NSLog(@"[XRD] Skip ConnectionInterceptor");
+
+            if (objc_getClass("FriendTrackerWidget") || objc_getClass("LeaderboardWidget"))
+                %init(VisualMods);
+            else NSLog(@"[XRD] Skip VisualMods");
+
+            NSLog(@"[XRD] Hook groups initialized");
+
+            // Set up the ImGui ModMenu overlay once the app window is ready.
+            // Use UIApplicationDidBecomeActiveNotification so the window and
+            // Metal context are fully initialized before we add our overlay.
+            [[NSNotificationCenter defaultCenter]
+                addObserverForName:UIApplicationDidBecomeActiveNotification
+                object:nil queue:[NSOperationQueue mainQueue]
+                usingBlock:^(NSNotification *note) {
+                    static dispatch_once_t menuOnce;
+                    dispatch_once(&menuOnce, ^{
+                        @try {
+                            UIWindow *window = nil;
+                            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                                    for (UIWindow *w in ((UIWindowScene *)scene).windows) {
+                                        if (w.isKeyWindow) { window = w; break; }
+                                    }
+                                    if (window) break;
+                                }
+                            }
+                            if (!window)
+                                window = [UIApplication sharedApplication].keyWindow;
+                            if (window) {
+                                [[ModMenuRenderer shared] setupWithWindow:window];
+                                NSLog(@"[XRD] ModMenu overlay initialized");
+                            }
+                        } @catch (NSException *e) {
+                            NSLog(@"[XRD] ModMenu setup failed: %@", e);
+                        }
+                    });
+                }];
+
+        } @catch (NSException *e) {
+            NSLog(@"[XRD] FATAL: Hook init failed: %@ — %@", e.name, e.reason);
+        }
     }
 }
