@@ -81,11 +81,11 @@ jobs:
       - name: Setup injection tools
         if: steps.get_ipa.outputs.has_ipa == 'true'
         run: |
-          # Build insert_dylib from source (simpler than optool)
-          git clone https://github.com/tyilo/insert_dylib.git /tmp/insert_dylib
-          cd /tmp/insert_dylib
-          gcc insert_dylib/main.c -o insert_dylib -framework Security -O2 2>&1
-          sudo cp insert_dylib /usr/local/bin/
+          git clone https://github.com/tyilo/insert_dylib.git /tmp/insert_dylib_src
+          cd /tmp/insert_dylib_src
+          gcc insert_dylib/main.c -o /tmp/insert_dylib_bin -framework Security -O2
+          sudo cp /tmp/insert_dylib_bin /usr/local/bin/insert_dylib
+          insert_dylib --help 2>&1 || true
           echo "insert_dylib installed successfully"
 
       - name: Inject dylib into IPA
