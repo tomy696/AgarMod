@@ -96,12 +96,12 @@ jobs:
           ./tools/inject.sh \
             "${{ steps.get_ipa.outputs.ipa_path }}" \
             .theos/obj/XRD.dylib \
-            ./XRD-modded.ipa
+            "$GITHUB_WORKSPACE/XRD-modded.ipa"
 
       - name: Upload modded IPA
         if: steps.get_ipa.outputs.has_ipa == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: XRD-IPA
-          path: ./XRD-modded.ipa
+          path: ${{ github.workspace }}/XRD-modded.ipa
           if-no-files-found: warn
