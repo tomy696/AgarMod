@@ -1710,80 +1710,9 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
         @try {
             [ModSettings shared];
 
-            // Core hooks AppDelegate — always exists
+            // DIAGNOSTIC BUILD: only Core + menu, all game hooks disabled
             %init(Core);
-            // UIViewController — system class, always exists
-            %init(FPSUnlockDisplay);
-
-            // Only init groups whose target classes exist in this binary.
-            // All class names below are reconstructed guesses from the IPA.
-            // If they don't match the actual binary, skip the group entirely.
-
-            if (objc_getClass("GameplayWidget"))
-                %init(GameplayCapture);
-            else NSLog(@"[XRD] Skip GameplayCapture");
-
-            if (objc_getClass("GameplaySettings"))
-                %init(ZoomHack);
-            else NSLog(@"[XRD] Skip ZoomHack");
-
-            if (objc_getClass("AgarCell"))
-                %init(CellMassOverlay);
-            else NSLog(@"[XRD] Skip CellMassOverlay");
-
-            if (objc_getClass("ScoreWidget") || objc_getClass("BaseArenaState"))
-                %init(MassDisplay);
-            else NSLog(@"[XRD] Skip MassDisplay");
-
-            if (objc_getClass("AgarCellView"))
-                %init(EnemyMassRenderer);
-            else NSLog(@"[XRD] Skip EnemyMassRenderer");
-
-            if (objc_getClass("UserWallet"))
-                %init(SkinUnlock);
-            else NSLog(@"[XRD] Skip SkinUnlock");
-
-            if (objc_getClass("ContinueGame"))
-                %init(AutoContinue);
-            else NSLog(@"[XRD] Skip AutoContinue");
-
-            if (objc_getClass("BaseArenaView"))
-                %init(FPSUnlock);
-            else NSLog(@"[XRD] Skip FPSUnlock");
-
-            if (objc_getClass("AgarCellView") || objc_getClass("SoftBodyCellView"))
-                %init(FastMode);
-            else NSLog(@"[XRD] Skip FastMode");
-
-            if (objc_getClass("BaseArenaState"))
-                %init(DarkMode);
-            else NSLog(@"[XRD] Skip DarkMode");
-
-            if (objc_getClass("BaseArenaState"))
-                %init(GridAndBorderHide);
-            else NSLog(@"[XRD] Skip GridAndBorderHide");
-
-            if (objc_getClass("FriendTrackerWidget"))
-                %init(FriendTrackerHide);
-            else NSLog(@"[XRD] Skip FriendTrackerHide");
-
-            if (objc_getClass("CollectibleCounterWidget"))
-                %init(TokenCounterHide);
-            else NSLog(@"[XRD] Skip TokenCounterHide");
-
-            if (objc_getClass("OnlineArenaState"))
-                %init(ServerLoader);
-            else NSLog(@"[XRD] Skip ServerLoader");
-
-            if (objc_getClass("OnlineArenaState"))
-                %init(ConnectionInterceptor);
-            else NSLog(@"[XRD] Skip ConnectionInterceptor");
-
-            if (objc_getClass("FriendTrackerWidget") || objc_getClass("LeaderboardWidget"))
-                %init(VisualMods);
-            else NSLog(@"[XRD] Skip VisualMods");
-
-            NSLog(@"[XRD] Hook groups initialized");
+            NSLog(@"[XRD] DIAGNOSTIC: Core only, all game hooks DISABLED");
 
             [[NSNotificationCenter defaultCenter]
                 addObserverForName:UIApplicationDidBecomeActiveNotification
