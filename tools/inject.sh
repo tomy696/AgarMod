@@ -174,6 +174,35 @@ if [[ "$HAS_REAL_BINARY" == "false" ]]; then
     fi
 fi
 
+# ── Fix install names for sideloading ────────────────────────────────────────
+# On jailbroken devices, dylibs resolve via /Library/Frameworks/. Sideloaded
+# apps must use @rpath which resolves to @executable_path/Frameworks/.
+info "Fixing install names for sideloaded app..."
+
+# Set CydiaSubstrate's identity to @rpath-relative
+if [[ -f "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" ]]; then
+    install_name_tool -id @rpath/CydiaSubstrate.framework/CydiaSubstrate \
+        "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" 2>/dev/null || true
+fi
+
+# Fix XRD.dylib references to CydiaSubstrate (covers both possible original paths)
+install_name_tool -change \
+    /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate \
+    @rpath/CydiaSubstrate.framework/CydiaSubstrate \
+    "$FRAMEWORKS_DIR/$DYLIB_NAME" 2>/dev/null || true
+install_name_tool -change \
+    /usr/lib/libsubstrate.dylib \
+    @rpath/CydiaSubstrate.framework/CydiaSubstrate \
+    "$FRAMEWORKS_DIR/$DYLIB_NAME" 2>/dev/null || true
+
+# Set XRD.dylib's own identity
+install_name_tool -id @rpath/$DYLIB_NAME "$FRAMEWORKS_DIR/$DYLIB_NAME" 2>/dev/null || true
+
+# Ensure the main binary can find @rpath frameworks
+install_name_tool -add_rpath @executable_path/Frameworks "$MAIN_BINARY" 2>/dev/null || true
+
+ok "Install names patched for sideloading"
+
 # ── Inject load command ──────────────────────────────────────────────────────
 LOAD_PATH="@rpath/XRD.dylib"
 info "Injecting load command: ${BOLD}${LOAD_PATH}${RESET}"
