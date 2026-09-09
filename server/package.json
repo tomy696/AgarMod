@@ -1,0 +1,16 @@
+{
+  "name": "agario-bot-server",
+  "version": "1.0.0",
+  "description": "Agar.io bot server for iOS tweak",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "protobufjs": "^7.2.6",
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0"
+  }
+}

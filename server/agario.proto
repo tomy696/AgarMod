@@ -1,0 +1,301 @@
+// =============================================================================
+// agario.proto - Best-effort reconstruction of the Agar.io protobuf schema
+//
+// Reverse-engineered from the iOS binary (agar.io arm64 Mach-O).
+// Field numbers and types are approximate -- the real .proto is proprietary.
+// =============================================================================
+
+syntax = "proto3";
+package agario.proto;
+
+// ---------------------------------------------------------------------------
+// Top-level envelope -- every WebSocket frame wraps a single req
+// ---------------------------------------------------------------------------
+
+message envelope {
+  req message = 1;
+}
+
+// ---------------------------------------------------------------------------
+// req_type_enum -- discriminator for the oneof inside req
+// ---------------------------------------------------------------------------
+
+enum req_type_enum {
+  UNKNOWN = 0;
+
+  // Server -> Client
+  OFFLINE_TLE_QUEST_STATE_RESPONSE = 1;
+  GAME_LOBBY_QUEUE_UPDATE = 3;
+  OFFER_BUNDLE_RESPONSE = 4;
+  GAME_SESSION_HIGHEST_MASS = 5;
+  USER_STATS_RESPONSE = 7;
+  GAME_OVER = 8;
+  CONFIGURATION_CHANGE = 13;
+  POTIONS_UPDATE = 15;
+  GAME_BATTLE_ROYALE_ARENA_PHASE = 16;
+  UDP_HANDSHAKE = 21;
+  WALLET_UPDATES = 22;
+  USER_PARTY_MEMBERSHIP_UPDATE = 25;
+  DAILY_REWARDS_STATE_UPDATE = 28;
+  RECONNECT = 33;
+  USER_PARTY_CREATE_RESPONSE = 37;
+  LOGIN_RESPONSE = 42;
+  ACTIVATE_BOOST_RESPONSE = 43;
+  SERVER_GOING_OFFLINE = 44;
+  GAME_ARENA_PARTY_LEADERBOARD_ENTRIES_UPDATES = 45;
+  GAME_ENTER_RESPONSE = 52;
+  OFFLINE_TLE_CLAIM_MAIN_QUEST_NODE_RESPONSE = 54;
+  GAME_CONTINUE_UPDATE_RESPONSE = 56;
+  PURCHASE_WALLET_UPDATES = 58;
+  USER_SEASON_STATE_RESPONSE = 59;
+  USER_REWARDS_TOKEN_RESPONSE = 60;
+  USER_ADVENTURE_COLLECT_RESPONSE = 63;
+  INAPP_PURCHASE_RESPONSE = 67;
+  NETWORK_MESSAGE_PING = 70;
+  GAME_ARENA_EVENT = 72;
+  DEVICE_TOKEN_UPDATE = 74;
+  USER_SEASON_CLAIM_REWARD_RESPONSE = 75;
+  USER_FRIEND_LIST_UPDATE = 77;
+  GAME_ARENA_CURRENT_SAFE_AREA = 78;
+  OPEN_POTION_FOR_PRODUCT_RESPONSE = 79;
+  CONTENT_MANAGEMENT_SYSTEM_UPDATE = 81;
+  GAME_ARENA_PARTY_CELL_UPDATES = 82;
+  USER_ADVENTURE_STATE_RESPONSE = 83;
+  AUTOMATION_REQUEST_UPDATE = 85;
+  EMOJI_DISPLAY_RESPONSE = 87;
+  GAME_JOINED = 88;
+  GAME_ARENA_STATE = 90;
+  REALM_UPGRADE_RESPONSE = 91;
+  SOFT_PURCHASE_RESPONSE = 93;
+  BREW_POTION_FOR_SLOT_RESPONSE = 96;
+  DISCONNECT = 97;
+  USER_PARTY_JOIN_RESPONSE = 98;
+  NO_PROPER_RESPONSE = 101;
+  GAME_ARENA_LEADERBOARD = 102;
+  USER_TIMED_EVENT_UPDATES = 103;
+  PONG = 104;
+  UPDATE_USER_SETTINGS_RESPONSE = 105;
+  CONNECT_RESPONSE = 106;
+  FACEBOOK_INVITATION_REWARD_UPDATES = 108;
+  OPEN_POTION_FOR_SLOT_RESPONSE = 109;
+  GAME_CONTINUE_UPDATE_REQUEST_FROM_SERVER = 111;
+  GAME_CONTINUE_INFO = 112;
+  GAME_LOBBY_ENTER_RESPONSE = 113;
+  ACTIVATE_TIMED_EVENT_RESPONSE = 114;
+  USER_SKINS_CREATE_RESPONSE = 115;
+  ACTIVATE_REWARD_LINK_RESPONSE = 116;
+  SUBSCRIPTION_WALLET_UPDATES = 117;
+  LOGIN_HANDSHAKE_RESPONSE_ENCRYPTED = 120;
+}
+
+// ---------------------------------------------------------------------------
+// req -- the multiplexed message container
+// ---------------------------------------------------------------------------
+
+message req {
+  req_type_enum type = 1;
+
+  // The inner payload sits at field 2+ depending on the type.
+  // A proper oneof would go here; we list the most important shapes below.
+}
+
+// ---------------------------------------------------------------------------
+// Connection / login
+// ---------------------------------------------------------------------------
+
+message connect_request {
+  string token = 1;
+}
+
+message connect_response {
+  bool   success   = 1;
+  string server_id = 2;
+}
+
+message login_handshake_request {
+  // crypto handshake payload (opaque bytes)
+  bytes payload = 1;
+}
+
+message login_handshake_response_encrypted {
+  bytes encrypted_payload = 1;
+}
+
+message login_request_v5 {
+  string name           = 1;
+  string client_version = 2;
+  string platform       = 3;
+}
+
+message login_response {
+  server_info   server  = 1;
+  user_info     user    = 2;
+  user_stats    stats   = 3;
+  repeated user_wallet_item  wallet       = 4;
+  repeated user_boost_item   boosts       = 5;
+  repeated user_timed_event  timed_events = 6;
+  repeated user_setting      settings     = 7;
+  tokens        auth_tokens              = 8;
+  realm_info    realm                    = 9;
+  device        dev                      = 10;
+}
+
+// ---------------------------------------------------------------------------
+// Game flow
+// ---------------------------------------------------------------------------
+
+message game_enter_request {
+  string player_name = 1;
+  string skin_id     = 2;
+  string party_code  = 3;
+  int32  game_mode   = 4; // 0 = classic
+}
+
+message game_enter_response {
+  bool  success   = 1;
+  int32 player_id = 2;
+}
+
+message game_joined {
+  int32 arena_id     = 1;
+  int32 arena_width  = 2;
+  int32 arena_height = 3;
+}
+
+message game_over {
+  game_session_stats stats = 1;
+}
+
+message disconnect {
+  disconnect_reason_enum reason = 1;
+}
+
+enum disconnect_reason_enum {
+  DISCONNECT_UNKNOWN = 0;
+  KICKED = 1;
+  SERVER_SHUTDOWN = 2;
+  DUPLICATE_LOGIN = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Arena state
+// ---------------------------------------------------------------------------
+
+message game_arena_state {
+  repeated game_arena_cell_state appeared    = 1;
+  repeated game_arena_cell_state changed     = 2;
+  repeated game_arena_cell_death deaths      = 3;
+  repeated int32                 disappeared = 4;
+}
+
+message game_arena_cell_state {
+  int32  cell_id  = 1;
+  sint32 x        = 2;
+  sint32 y        = 3;
+  float  radius   = 4;
+  int32  owner_id = 5;
+  string name     = 6;
+  string skin_id  = 7;
+  int32  flags    = 8; // bit 0: virus, bit 1: food, bit 2: ejected
+}
+
+message game_arena_cell_death {
+  int32 cell_id    = 1;
+  int32 killer_id  = 2;
+}
+
+message game_arena_point {
+  float x = 1;
+  float y = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Player actions (Client -> Server)
+// ---------------------------------------------------------------------------
+
+message game_arena_direction_vector {
+  float x = 1;
+  float y = 2;
+}
+
+message game_arena_player_split {
+  // no fields; presence alone triggers the split
+}
+
+message game_arena_player_shoot_mass {
+  // no fields; presence alone triggers mass ejection
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard
+// ---------------------------------------------------------------------------
+
+message game_arena_leaderboard {
+  repeated game_arena_leaderboard_entry entries        = 1;
+  int32                                 player_position = 2;
+}
+
+message game_arena_leaderboard_entry {
+  int32  position = 1;
+  string name     = 2;
+  int32  id       = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Keepalive
+// ---------------------------------------------------------------------------
+
+message ping {
+  int64 timestamp = 1;
+}
+
+message pong {
+  int64 timestamp = 1;
+}
+
+// ---------------------------------------------------------------------------
+// Party
+// ---------------------------------------------------------------------------
+
+message user_party_join_request {
+  string party_code = 1;
+}
+
+message user_party_join_response {
+  bool   success    = 1;
+  string party_code = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Stub / reference types (fields not fully known)
+// ---------------------------------------------------------------------------
+
+message server_info    { string id = 1; }
+message user_info      { string name = 1; int32 level = 2; }
+message user_stats     { int64 highest_mass = 1; int32 games_played = 2; }
+message user_wallet_item  { string item_id = 1; int32 quantity = 2; }
+message user_boost_item   { string boost_id = 1; int32 remaining = 2; }
+message user_timed_event  { string event_id = 1; int64 end_time = 2; }
+message user_setting      { string key = 1; string value = 2; }
+message tokens            { string access = 1; string refresh = 2; }
+message realm_info        { string region = 1; }
+message device            { string device_id = 1; string platform = 2; }
+message game_session_stats {
+  int64 highest_mass = 1;
+  int32 cells_eaten  = 2;
+  int32 time_alive   = 3;
+  int32 position     = 4;
+}
+message reconnect {
+  string server_address = 1;
+}
+message udp_handshake {
+  bytes token = 1;
+}
+message emoji_display_request {
+  int32 emoji_id = 1;
+}
+message emoji_display_response {
+  int32 player_id = 1;
+  int32 emoji_id  = 2;
+}

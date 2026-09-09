@@ -1,0 +1,9 @@
+Package: com.agarmod.tweak
+Name: AgarMod
+Version: 1.0.0
+Architecture: iphoneos-arm64
+Description: Agar.io mod with zoom, bots, macros, and more
+Author: AgarMod Team
+Maintainer: AgarMod Team
+Section: Tweaks
+Depends: mobilesubstrate

@@ -1,0 +1,27 @@
+# Theos build output
+.theos/
+packages/
+obj/
+
+# Node.js
+server/node_modules/
+server/package-lock.json
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# IDEs
+.vscode/
+.idea/
+*.xcworkspace
+*.xcuserdata
+
+# Build artifacts
+*.dylib
+*.deb
+*.ipa
+
+# Temp
+*.o
+*.d
