@@ -347,9 +347,42 @@
   <!-- Server Config -->
   <div class="section">
     <div class="section-title">Game Server</div>
-    <div class="input-group">
-      <label>Server IP (from Agar.io)</label>
+    <div class="input-row">
+      <div class="input-group">
+        <label>Region</label>
+        <select id="region">
+          <option value="">Custom IP</option>
+          <option value="EU-London">EU-London</option>
+          <option value="EU-Germany">EU-Germany</option>
+          <option value="EU-France">EU-France</option>
+          <option value="US-Atlanta">US-Atlanta</option>
+          <option value="US-Dallas">US-Dallas</option>
+          <option value="US-San Jose">US-San Jose</option>
+          <option value="BR-Brazil">BR-Brazil</option>
+          <option value="JP-Tokyo">JP-Tokyo</option>
+          <option value="SG-Singapore">SG-Singapore</option>
+          <option value="AU-Sydney">AU-Sydney</option>
+          <option value="RU-Russia">RU-Russia</option>
+          <option value="TK-Turkey">TK-Turkey</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>Game Mode</label>
+        <select id="gameMode">
+          <option value="ffa">FFA</option>
+          <option value="battle">Battle Royale</option>
+          <option value="teams">Teams</option>
+          <option value="exp">Experimental</option>
+        </select>
+      </div>
+    </div>
+    <div class="input-group" id="customIPGroup">
+      <label>Server IP (or auto from tweak)</label>
       <input type="text" id="targetIP" placeholder="live-arena-XXX.agar.io:443" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="input-group">
+      <label>Party Code (bots join your party)</label>
+      <input type="text" id="partyCode" placeholder="Paste your party link/code here" autocomplete="off">
     </div>
     <div class="input-row">
       <div class="input-group">
@@ -357,21 +390,20 @@
         <input type="text" id="botName" value="XRD" maxlength="15">
       </div>
       <div class="input-group">
-        <label>Mode</label>
+        <label>Bot Mode</label>
         <select id="botMode">
-          <option value="feed">Feed</option>
-          <option value="move">Follow</option>
-          <option value="split">Split Run</option>
+          <option value="feed">Feed (give mass)</option>
+          <option value="move">Follow player</option>
+          <option value="teamer">Teamer (feed + kill)</option>
+          <option value="farm">Farm (auto eat)</option>
+          <option value="makevirus">Virus attack</option>
+          <option value="breakvirus">Virus defense</option>
         </select>
       </div>
     </div>
     <div class="slider-group">
       <label>Bots <span id="botCountLabel">10</span></label>
       <input type="range" id="botCount" min="1" max="50" value="10">
-    </div>
-    <div class="input-group">
-      <label>Party Code (optional)</label>
-      <input type="text" id="partyCode" placeholder="Leave empty for FFA" autocomplete="off">
     </div>
   </div>
 
@@ -421,6 +453,9 @@ const $mode = document.getElementById('botMode');
 const $count = document.getElementById('botCount');
 const $countLabel = document.getElementById('botCountLabel');
 const $party = document.getElementById('partyCode');
+const $region = document.getElementById('region');
+const $gameMode = document.getElementById('gameMode');
+const $customIPGroup = document.getElementById('customIPGroup');
 const $statBots = document.getElementById('statBots');
 const $statConn = document.getElementById('statConnected');
 const $statProxy = document.getElementById('statProxies');
@@ -435,12 +470,26 @@ const $btnStop = document.getElementById('btnStop');
 const $btnPause = document.getElementById('btnPause');
 const $btnResume = document.getElementById('btnResume');
 
-// Restore saved IP
-const savedIP = localStorage.getItem('xrd_ip');
-if (savedIP) $ip.value = savedIP;
+// Restore saved values
+try {
+  const savedIP = localStorage.getItem('xrd_ip');
+  if (savedIP) $ip.value = savedIP;
+  const savedRegion = localStorage.getItem('xrd_region');
+  if (savedRegion) $region.value = savedRegion;
+  const savedParty = localStorage.getItem('xrd_party');
+  if (savedParty) $party.value = savedParty;
+} catch(e) {}
+
+// Region controls: show custom IP only when "Custom IP" selected
+$region.onchange = () => {
+  $customIPGroup.style.display = $region.value === '' ? 'block' : 'none';
+  try { localStorage.setItem('xrd_region', $region.value); } catch(e) {}
+};
+$region.onchange(); // init visibility
 
 $count.oninput = () => { $countLabel.textContent = $count.value; };
-$ip.onchange = () => { localStorage.setItem('xrd_ip', $ip.value); };
+$ip.onchange = () => { try { localStorage.setItem('xrd_ip', $ip.value); } catch(e) {} };
+$party.onchange = () => { try { localStorage.setItem('xrd_party', $party.value); } catch(e) {} };
 
 function log(msg, type = '') {
   const ts = new Date().toLocaleTimeString();
@@ -486,21 +535,26 @@ async function apiGet(path) {
 }
 
 async function startBots() {
-  const ip = $ip.value.trim();
-  if (!ip) {
-    log('Enter a server IP first!', 'error');
+  const region = $region.value;
+  const ip = region ? '' : $ip.value.trim();
+  if (!region && !ip) {
+    log('Select a region or enter a server IP!', 'error');
     $ip.focus();
     return;
   }
-  log('Starting ' + $count.value + ' bots on ' + ip + '...', 'info');
+  const target = region || ip;
+  const party = $party.value.trim();
+  log('Starting ' + $count.value + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
   const res = await apiPost('/botter2.php', {
     action: 'start',
     session_id: sessionId,
-    targetip: ip,
+    targetip: ip || undefined,
+    region: region || undefined,
+    game_mode: $gameMode.value,
     mode: $mode.value,
     bot_name: $name.value,
     bot_count: $count.value,
-    party_code: $party.value || undefined,
+    party_code: party || undefined,
   });
   if (res && res.api_response) {
     setState('running');
