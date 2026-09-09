@@ -1,0 +1,100 @@
+name: Build AgarMod
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-tweak:
+    name: Build iOS Tweak
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        run: |
+          # Install Theos dependencies
+          brew install ldid dpkg
+
+          # Clone Theos
+          export THEOS=$HOME/theos
+          git clone --recursive https://github.com/theos/theos.git $THEOS
+
+          # Download iOS SDK (14.5)
+          curl -L -o /tmp/iPhoneOS14.5.sdk.tar.xz \
+            "https://github.com/theos/sdks/releases/download/master/iPhoneOS14.5.sdk.tar.xz"
+          mkdir -p $THEOS/sdks
+          tar -xf /tmp/iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks
+
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+      - name: Build Tweak
+        run: |
+          export THEOS=$HOME/theos
+          export PATH=$THEOS/bin:$PATH
+          make FINALPACKAGE=1
+        env:
+          THEOS: ${{ env.THEOS }}
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgarMod-dylib
+          path: .theos/obj/debug/AgarMod.dylib
+          if-no-files-found: warn
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgarMod-deb
+          path: packages/*.deb
+          if-no-files-found: warn
+
+  build-ipa:
+    name: Build Modded IPA
+    runs-on: macos-latest
+    needs: build-tweak
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download dylib
+        uses: actions/download-artifact@v4
+        with:
+          name: AgarMod-dylib
+          path: ./build
+
+      - name: Setup tools
+        run: |
+          brew install ldid
+          # Install optool
+          git clone https://github.com/alexzielenski/optool.git /tmp/optool
+          cd /tmp/optool
+          xcodebuild -project optool.xcodeproj -scheme optool -configuration Release SYMROOT=/tmp/optool-build
+          sudo cp /tmp/optool-build/Release/optool /usr/local/bin/
+
+      - name: Inject into IPA
+        run: |
+          # User must upload the original IPA as a secret/artifact
+          if [ -f "${{ github.workspace }}/original.ipa" ]; then
+            chmod +x tools/inject.sh
+            ./tools/inject.sh "${{ github.workspace }}/original.ipa" ./build/AgarMod.dylib ./AgarMod-modded.ipa
+          else
+            echo "No original.ipa found. Upload it to the repo root or as an artifact to build the modded IPA."
+            echo "For now, only the dylib is available."
+          fi
+
+      - name: Upload modded IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgarMod-IPA
+          path: ./*-modded.ipa
+          if-no-files-found: ignore
