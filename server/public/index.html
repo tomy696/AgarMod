@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AgarMod - Bot Control Panel</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #12121a;
+    --bg3: #1a1a28;
+    --border: #2a2a3d;
+    --text: #e0e0e8;
+    --text2: #8888a0;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --green: #00e676;
+    --red: #ff5252;
+    --orange: #ffab40;
+    --blue: #448aff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  .app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 16px 32px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 24px 0 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+  .header .version {
+    font-size: 11px;
+    color: var(--text2);
+    margin-top: 4px;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .status-card {
+    flex: 1;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+  .status-card .value {
+    font-size: 24px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .status-card .label {
+    font-size: 10px;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+  .val-green { color: var(--green); }
+  .val-blue { color: var(--blue); }
+  .val-orange { color: var(--orange); }
+
+  /* Sections */
+  .section {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 12px;
+  }
+
+  /* Inputs */
+  .input-group {
+    margin-bottom: 12px;
+  }
+  .input-group label {
+    display: block;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 4px;
+  }
+  .input-group input, .input-group select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .input-group input:focus, .input-group select:focus {
+    border-color: var(--accent);
+  }
+  .input-group select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%238888a0' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .input-row {
+    display: flex;
+    gap: 10px;
+  }
+  .input-row .input-group { flex: 1; }
+
+  /* Slider */
+  .slider-group {
+    margin-bottom: 12px;
+  }
+  .slider-group label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text2);
+    margin-bottom: 6px;
+  }
+  .slider-group label span {
+    color: var(--accent2);
+    font-weight: 600;
+  }
+  input[type="range"] {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg3);
+    border-radius: 3px;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--accent2);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn-start {
+    background: linear-gradient(135deg, #00c853, #00e676);
+    color: #000;
+  }
+  .btn-stop {
+    background: linear-gradient(135deg, #d50000, #ff5252);
+    color: #fff;
+  }
+  .btn-pause {
+    background: linear-gradient(135deg, #ff6d00, #ffab40);
+    color: #000;
+  }
+  .btn-resume {
+    background: linear-gradient(135deg, #2979ff, #448aff);
+    color: #fff;
+  }
+
+  /* Log */
+  .log-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .log-box::-webkit-scrollbar { width: 4px; }
+  .log-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-entry { color: var(--text2); }
+  .log-entry.success { color: var(--green); }
+  .log-entry.error { color: var(--red); }
+  .log-entry.info { color: var(--blue); }
+  .log-entry.warn { color: var(--orange); }
+
+  /* Proxy indicator */
+  .proxy-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg3);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .proxy-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+  }
+  .proxy-dot.dead {
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+  }
+  .proxy-dot.none {
+    background: var(--orange);
+    box-shadow: 0 0 6px var(--orange);
+  }
+
+  /* Bot list */
+  .bot-list {
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  .bot-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .bot-item:last-child { border-bottom: none; }
+  .bot-status {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .bot-status.connected { background: var(--green); }
+  .bot-status.connecting { background: var(--orange); }
+  .bot-status.disconnected { background: var(--red); }
+
+  /* Server state badge */
+  .state-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .state-badge.idle { background: var(--bg3); color: var(--text2); }
+  .state-badge.running { background: rgba(0,230,118,0.15); color: var(--green); }
+  .state-badge.paused { background: rgba(255,171,64,0.15); color: var(--orange); }
+  .state-badge.error { background: rgba(255,82,82,0.15); color: var(--red); }
+
+  /* Connection indicator */
+  .connection-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+  .connection-dot.ok { background: var(--green); }
+  .connection-dot.err { background: var(--red); }
+
+  /* Pulse animation */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .pulsing { animation: pulse 1.5s infinite; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <h1>AgarMod</h1>
+    <div class="version">Bot Control Panel v1.0 &mdash; <span class="connection-dot ok" id="connDot"></span><span id="connLabel">Connected</span></div>
+  </div>
+
+  <!-- Status Cards -->
+  <div class="status-bar">
+    <div class="status-card">
+      <div class="value val-blue" id="statBots">0</div>
+      <div class="label">Bots</div>
+    </div>
+    <div class="status-card">
+      <div class="value val-green" id="statConnected">0</div>
+      <div class="label">Connected</div>
+    </div>
+    <div class="status-card">
+      <div class="value val-orange" id="statProxies">0</div>
+      <div class="label">Proxies</div>
+    </div>
+  </div>
+
+  <!-- Server Config -->
+  <div class="section">
+    <div class="section-title">Game Server</div>
+    <div class="input-group">
+      <label>Server IP (from Agar.io)</label>
+      <input type="text" id="targetIP" placeholder="live-arena-XXX.agar.io:443" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="input-row">
+      <div class="input-group">
+        <label>Bot Name</label>
+        <input type="text" id="botName" value="AgarMod" maxlength="15">
+      </div>
+      <div class="input-group">
+        <label>Mode</label>
+        <select id="botMode">
+          <option value="feed">Feed</option>
+          <option value="move">Follow</option>
+          <option value="split">Split Run</option>
+        </select>
+      </div>
+    </div>
+    <div class="slider-group">
+      <label>Bots <span id="botCountLabel">10</span></label>
+      <input type="range" id="botCount" min="1" max="50" value="10">
+    </div>
+    <div class="input-group">
+      <label>Party Code (optional)</label>
+      <input type="text" id="partyCode" placeholder="Leave empty for FFA" autocomplete="off">
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="section">
+    <div class="section-title">Controls &mdash; <span class="state-badge idle" id="stateBadge">Idle</span></div>
+    <div class="btn-row">
+      <button class="btn btn-start" id="btnStart" onclick="startBots()">Start</button>
+      <button class="btn btn-stop" id="btnStop" onclick="stopBots()" disabled>Stop</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-pause" id="btnPause" onclick="pauseBots()" disabled>Pause</button>
+      <button class="btn btn-resume" id="btnResume" onclick="resumeBots()" disabled>Resume</button>
+    </div>
+  </div>
+
+  <!-- Proxy Status -->
+  <div class="section">
+    <div class="section-title">Proxy Status</div>
+    <div class="proxy-bar">
+      <div class="proxy-dot" id="proxyDot"></div>
+      <span id="proxyLabel">Loading...</span>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="section">
+    <div class="section-title">Log</div>
+    <div class="log-box" id="logBox">
+      <div class="log-entry info">Dashboard ready. Enter a server IP and start bots.</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = window.location.origin;
+let sessionId = localStorage.getItem('agm_session') || crypto.randomUUID();
+localStorage.setItem('agm_session', sessionId);
+let currentState = 'idle';
+let pollTimer = null;
+
+// Elements
+const $ip = document.getElementById('targetIP');
+const $name = document.getElementById('botName');
+const $mode = document.getElementById('botMode');
+const $count = document.getElementById('botCount');
+const $countLabel = document.getElementById('botCountLabel');
+const $party = document.getElementById('partyCode');
+const $statBots = document.getElementById('statBots');
+const $statConn = document.getElementById('statConnected');
+const $statProxy = document.getElementById('statProxies');
+const $badge = document.getElementById('stateBadge');
+const $proxyDot = document.getElementById('proxyDot');
+const $proxyLabel = document.getElementById('proxyLabel');
+const $connDot = document.getElementById('connDot');
+const $connLabel = document.getElementById('connLabel');
+const $log = document.getElementById('logBox');
+const $btnStart = document.getElementById('btnStart');
+const $btnStop = document.getElementById('btnStop');
+const $btnPause = document.getElementById('btnPause');
+const $btnResume = document.getElementById('btnResume');
+
+// Restore saved IP
+const savedIP = localStorage.getItem('agm_ip');
+if (savedIP) $ip.value = savedIP;
+
+$count.oninput = () => { $countLabel.textContent = $count.value; };
+$ip.onchange = () => { localStorage.setItem('agm_ip', $ip.value); };
+
+function log(msg, type = '') {
+  const ts = new Date().toLocaleTimeString();
+  const el = document.createElement('div');
+  el.className = 'log-entry ' + type;
+  el.textContent = `[${ts}] ${msg}`;
+  $log.appendChild(el);
+  $log.scrollTop = $log.scrollHeight;
+  if ($log.children.length > 100) $log.removeChild($log.firstChild);
+}
+
+function setState(state) {
+  currentState = state;
+  $badge.className = 'state-badge ' + state;
+  $badge.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+  $btnStart.disabled = state === 'running' || state === 'paused';
+  $btnStop.disabled = state === 'idle';
+  $btnPause.disabled = state !== 'running';
+  $btnResume.disabled = state !== 'paused';
+}
+
+async function apiPost(path, data) {
+  try {
+    const res = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return await res.json();
+  } catch (e) {
+    log('Network error: ' + e.message, 'error');
+    return null;
+  }
+}
+
+async function apiGet(path) {
+  try {
+    const res = await fetch(API + path);
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function startBots() {
+  const ip = $ip.value.trim();
+  if (!ip) {
+    log('Enter a server IP first!', 'error');
+    $ip.focus();
+    return;
+  }
+  log('Starting ' + $count.value + ' bots on ' + ip + '...', 'info');
+  const res = await apiPost('/botter2.php', {
+    action: 'start',
+    session_id: sessionId,
+    targetip: ip,
+    mode: $mode.value,
+    bot_name: $name.value,
+    bot_count: $count.value,
+    party_code: $party.value || undefined,
+  });
+  if (res && res.api_response) {
+    setState('running');
+    log('Started ' + (res.bots_started || $count.value) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
+    startPolling();
+  } else {
+    log('Failed to start bots: ' + (res ? res.text : 'no response'), 'error');
+  }
+}
+
+async function stopBots() {
+  log('Stopping bots...', 'warn');
+  const res = await apiPost('/botter2.php', {
+    action: 'stop',
+    session_id: sessionId,
+  });
+  if (res && res.api_response) {
+    setState('idle');
+    log('Stopped ' + (res.bots_stopped || 'all') + ' bots.', 'success');
+    stopPolling();
+    $statBots.textContent = '0';
+    $statConn.textContent = '0';
+  }
+}
+
+async function pauseBots() {
+  log('Pausing bots...', 'warn');
+  const res = await apiPost('/botter2.php', {
+    action: 'pause',
+    session_id: sessionId,
+  });
+  if (res && res.api_response) {
+    setState('paused');
+    log('Paused ' + (res.bots_paused || 'all') + ' bots.', 'warn');
+  }
+}
+
+async function resumeBots() {
+  log('Resuming bots...', 'info');
+  const res = await apiPost('/botter2.php', {
+    action: 'resume',
+    session_id: sessionId,
+  });
+  if (res && res.api_response) {
+    setState('running');
+    log('Resumed ' + (res.bots_resumed || 'all') + ' bots.', 'success');
+  }
+}
+
+async function pollStatus() {
+  const data = await apiGet('/health');
+  if (!data) {
+    $connDot.className = 'connection-dot err';
+    $connLabel.textContent = 'Offline';
+    return;
+  }
+  $connDot.className = 'connection-dot ok';
+  $connLabel.textContent = 'Connected';
+
+  $statProxy.textContent = data.proxies ? data.proxies.alive : '0';
+  $statBots.textContent = data.total_bots || '0';
+  $statConn.textContent = data.total_connected || '0';
+
+  if (data.proxies) {
+    const p = data.proxies;
+    if (p.total === 0) {
+      $proxyDot.className = 'proxy-dot none';
+      $proxyLabel.textContent = 'No proxies configured';
+    } else if (p.alive === 0) {
+      $proxyDot.className = 'proxy-dot dead';
+      $proxyLabel.textContent = p.total + ' proxies (all dead)';
+    } else {
+      $proxyDot.className = 'proxy-dot';
+      $proxyLabel.textContent = p.alive + '/' + p.total + ' proxies alive';
+    }
+  }
+
+  // Update session-specific status
+  if (data.sessions && data.sessions.length > 0) {
+    const mySession = data.sessions.find(s => s.session_id === sessionId);
+    if (mySession) {
+      if (mySession.paused) setState('paused');
+      else if (mySession.bots_running > 0) setState('running');
+    }
+  } else if (currentState === 'running') {
+    // No sessions means bots disconnected
+  }
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollStatus, 2000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// Initial status check + slow poll
+pollStatus();
+setInterval(pollStatus, 5000);
+</script>
+</body>
+</html>

@@ -46,6 +46,9 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Serve dashboard
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use((req, res, next) => {
   const ts = new Date().toISOString();
   console.log(`[${ts}] ${req.method} ${req.path}`);
