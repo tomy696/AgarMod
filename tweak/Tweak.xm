@@ -1710,9 +1710,29 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
         @try {
             [ModSettings shared];
 
-            // DIAGNOSTIC BUILD: only Core + menu, all game hooks disabled
             %init(Core);
             NSLog(@"[XRD] DIAGNOSTIC: Core only, all game hooks DISABLED");
+
+            // All game hooks force-disabled for crash diagnosis
+            if (0) {
+                %init(FPSUnlockDisplay);
+                %init(GameplayCapture);
+                %init(ZoomHack);
+                %init(CellMassOverlay);
+                %init(MassDisplay);
+                %init(EnemyMassRenderer);
+                %init(SkinUnlock);
+                %init(AutoContinue);
+                %init(FPSUnlock);
+                %init(FastMode);
+                %init(DarkMode);
+                %init(GridAndBorderHide);
+                %init(FriendTrackerHide);
+                %init(TokenCounterHide);
+                %init(ServerLoader);
+                %init(ConnectionInterceptor);
+                %init(VisualMods);
+            }
 
             [[NSNotificationCenter defaultCenter]
                 addObserverForName:UIApplicationDidBecomeActiveNotification
