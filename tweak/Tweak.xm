@@ -1046,17 +1046,6 @@ static NSString *formatMass(float mass) {
 
 %group VisualMods
 
-%hook LeaderboardWidget
-
-- (void)updateLeaderboard:(id)data {
-    if (g_modEnabled && g_hideProfilePics) {
-        return;
-    }
-    %orig;
-}
-
-%end
-
 // Hide friend tracker
 %hook FriendTrackerWidget
 
