@@ -171,17 +171,18 @@ app.post('/api', (req, res) => {
 //   target_x/target_y — player position for bot targeting
 // ---------------------------------------------------------------------------
 
+// Region codes used by dashboard → passed to bouncer which resolves actual server
 const REGION_TO_SERVER = {
-  'eu-west-2': 'eu-west-2.mobile-live-v26.agario.miniclippt.com',
-  'eu-west-3': 'eu-west-3.mobile-live-v26.agario.miniclippt.com',
-  'eu-central-1': 'eu-central-1.mobile-live-v26.agario.miniclippt.com',
-  'us-east-1': 'us-east-1.mobile-live-v26.agario.miniclippt.com',
-  'us-east-2': 'us-east-2.mobile-live-v26.agario.miniclippt.com',
-  'us-west-1': 'us-west-1.mobile-live-v26.agario.miniclippt.com',
-  'sa-east-1': 'sa-east-1.mobile-live-v26.agario.miniclippt.com',
-  'ap-northeast-1': 'ap-northeast-1.mobile-live-v26.agario.miniclippt.com',
-  'ap-southeast-1': 'ap-southeast-1.mobile-live-v26.agario.miniclippt.com',
-  'me-south-1': 'me-south-1.mobile-live-v26.agario.miniclippt.com',
+  'eu-west-2': 'eu-west-2',
+  'eu-west-3': 'eu-west-3',
+  'eu-central-1': 'eu-central-1',
+  'us-east-1': 'us-east-1',
+  'us-east-2': 'us-east-2',
+  'us-west-1': 'us-west-1',
+  'sa-east-1': 'sa-east-1',
+  'ap-northeast-1': 'ap-northeast-1',
+  'ap-southeast-1': 'ap-southeast-1',
+  'me-south-1': 'me-south-1',
 };
 
 app.post('/botter2.php', (req, res) => {
@@ -407,7 +408,7 @@ const server = app.listen(PORT, async () => {
   const proxyStats = botManager.proxyPool.getStats();
   const clientVer = await fetchClientVersion();
   console.log('='.repeat(60));
-  console.log('  XRD Bot Server (Protocol 22)');
+  console.log('  XRD Bot Server (Protocol 23)');
   console.log(`  Port:           ${PORT}`);
   console.log(`  Client Version: ${clientVer}`);
   console.log(`  Proxies:        ${proxyStats.alive}/${proxyStats.total} alive`);

@@ -47,7 +47,7 @@ class BotClient extends EventEmitter {
     this._spawnDelay = null;
   }
 
-  connect(serverIP, proxy) {
+  async connect(serverIP, proxy) {
     if (this.state !== BOT_STATES.DISCONNECTED) this.disconnect();
 
     this.serverIP = serverIP;
@@ -61,9 +61,23 @@ class BotClient extends EventEmitter {
     this.offsetX = 0;
     this.offsetY = 0;
 
-    let url = serverIP.startsWith('ws://') || serverIP.startsWith('wss://')
-      ? serverIP
-      : `wss://${serverIP}`;
+    let url;
+    if (serverIP.startsWith('ws://') || serverIP.startsWith('wss://')) {
+      url = serverIP;
+    } else if (serverIP.includes('web-arenas') || serverIP.includes('/')) {
+      url = `wss://${serverIP}`;
+    } else {
+      try {
+        const region = serverIP;
+        const { server } = await proto.findServer(region, ':ffa');
+        url = `wss://${server}`;
+      } catch (err) {
+        console.error(`[Bot ${this.id}] Bouncer error:`, err.message);
+        this.state = BOT_STATES.DISCONNECTED;
+        this.emit('error', err);
+        return;
+      }
+    }
 
     if (this.partyCode && !url.includes('party_id=')) {
       url += (url.includes('?') ? '&' : '?') + `party_id=${this.partyCode}`;
@@ -124,7 +138,6 @@ class BotClient extends EventEmitter {
     try {
       if (encrypt && this.encryptionKey) {
         buf = proto.xorBytes(Buffer.from(buf), this.encryptionKey);
-        this.encryptionKey = proto.rotateKey(this.encryptionKey);
       }
       this.ws.send(buf);
     } catch (err) {
@@ -179,7 +192,7 @@ class BotClient extends EventEmitter {
     this.emit('error', err);
   }
 
-  // ---- Protocol 22 handlers ----
+  // ---- Protocol 23 handlers ----
 
   _handleEncryptionSetup(buffer) {
     const reader = new proto.Reader(buffer);
@@ -189,16 +202,15 @@ class BotClient extends EventEmitter {
 
     const serverName = reader.readString();
 
-    const hostname = this.serverUrl
+    const serverHost = this.serverUrl
       .replace(/^wss?:\/\//, '')
       .split(':')[0]
-      .split('?')[0]
-      .split('/')[0];
+      .split('?')[0];
 
-    this.encryptionKey = proto.computeEncryptionKey(hostname, serverName);
+    this.encryptionKey = proto.computeEncryptionKey(serverHost, serverName);
     this.state = BOT_STATES.ENCRYPTED;
 
-    console.log(`[Bot ${this.id}] Encryption established (host: ${hostname})`);
+    console.log(`[Bot ${this.id}] Encryption established (host: ${serverHost})`);
   }
 
   _handleSpawnRequest() {
@@ -247,6 +259,7 @@ class BotClient extends EventEmitter {
 
     switch (subOpcode) {
       case 16: this._parseEntities(reader); break;
+      case 32: this._handleSpawnConfirm(decBuf); break;
       case 64: this._parseBorders(reader); break;
     }
   }

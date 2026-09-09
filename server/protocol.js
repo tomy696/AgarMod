@@ -1,9 +1,7 @@
 'use strict';
 
-const { murmur2 } = require('murmurhash-js');
-
-const PROTOCOL_VERSION = 22;
-let CLIENT_VERSION = 31105;
+const PROTOCOL_VERSION = 23;
+let CLIENT_VERSION = 31129;
 
 class Writer {
   constructor(size) {
@@ -74,8 +72,36 @@ function lz4Decompress(input, output) {
   return output;
 }
 
-function computeEncryptionKey(hostname, serverName) {
-  return murmur2(hostname + serverName, 255);
+function computeEncryptionKey(serverHost, serverName) {
+  const hostnameBytes = Buffer.from(serverHost, 'ascii');
+  const nameBytes = Buffer.from(serverName + '\0', 'ascii');
+  const s = hostnameBytes.length + nameBytes.length;
+  const o = new Uint8Array(s);
+  o.set(hostnameBytes, 0);
+  o.set(nameBytes, hostnameBytes.length);
+  const m = new DataView(o.buffer);
+  let r = s - 1;
+  const g = (4 + (-4 & (r - 4))) | 0;
+  let h = 255 ^ r;
+  let f = 0;
+  let e = null;
+  while (r > 3) {
+    e = Math.imul(m.getInt32(f, true), 1540483477) | 0;
+    h = (Math.imul(e >>> 24 ^ e, 1540483477) | 0) ^ (Math.imul(h, 1540483477) | 0);
+    r -= 4;
+    f += 4;
+  }
+  switch (r) {
+    case 3: h = o[g + 2] << 16 ^ h; h = o[g + 1] << 8 ^ h; break;
+    case 2: h = o[g + 1] << 8 ^ h; break;
+    case 1: break;
+    default: e = h; break;
+  }
+  if (e !== h) e = Math.imul(o[g] ^ h, 1540483477) | 0;
+  e ^= e >>> 13;
+  e = Math.imul(e, 1540483477) | 0;
+  e ^= e >>> 15;
+  return e >>> 0;
 }
 
 function buildProtocolVersion() {
@@ -181,7 +207,15 @@ async function fetchClientVersion() {
   try {
     const https = require('https');
     return new Promise((resolve) => {
-      const req = https.get('https://agar.io/mc/agario.js', { timeout: 10000 }, (res) => {
+      const req = https.get('https://agar.io/mc/agario.js', {
+        timeout: 10000,
+        rejectUnauthorized: false,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+          'Referer': 'https://agar.io/',
+          'Origin': 'https://agar.io',
+        },
+      }, (res) => {
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
@@ -203,6 +237,100 @@ async function fetchClientVersion() {
   }
 }
 
+// ─── Bouncer (matchmaker) ──────────────────────────────────────────────────
+
+const BOUNCER_HOST = 'webbouncer-live-v8-0.agario.miniclippt.com';
+
+function buildBouncerRequest(region, gameMode) {
+  function writeVarint(buf, value) {
+    while (value > 0x7f) { buf.push((value & 0x7f) | 0x80); value >>>= 7; }
+    buf.push(value & 0x7f);
+  }
+  function writeTag(buf, wireType, fieldNum) { writeVarint(buf, (fieldNum << 3) | wireType); }
+  function writeStr(buf, str) {
+    const enc = Buffer.from(str, 'utf8');
+    writeVarint(buf, enc.length);
+    for (const b of enc) buf.push(b);
+  }
+  function writeMsg(buf, fieldNum, fn) {
+    writeTag(buf, 2, fieldNum);
+    const inner = [];
+    fn(inner);
+    writeVarint(buf, inner.length);
+    for (const b of inner) buf.push(b);
+  }
+
+  const buf = [];
+  writeMsg(buf, 1, (inner) => {
+    writeTag(inner, 2, 1); writeStr(inner, region);
+    writeTag(inner, 2, 2); writeStr(inner, gameMode);
+  });
+  return Buffer.from(buf);
+}
+
+const REGION_MAP = {
+  'eu-west-2': 'EU-London',
+  'eu-west-3': 'EU-London',
+  'eu-central-1': 'EU-London',
+  'us-east-1': 'US-Atlanta',
+  'us-east-2': 'US-Atlanta',
+  'us-west-1': 'US-Atlanta',
+  'sa-east-1': 'BR-Brazil',
+  'ap-northeast-1': 'JP-Tokyo',
+  'ap-southeast-1': 'SG-Singapore',
+  'me-south-1': 'TK-Turkey',
+};
+
+async function findServer(region, gameMode) {
+  const https = require('https');
+  const bouncerRegion = REGION_MAP[region] || region;
+  const body = buildBouncerRequest(bouncerRegion, gameMode || ':ffa');
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: BOUNCER_HOST,
+      path: '/v4/findServer',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Accept': '*/*',
+        'x-support-proto-version': '15.0.3',
+        'x-client-version': '' + CLIENT_VERSION,
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+        'Origin': 'https://agar.io',
+        'Content-Length': body.length,
+      },
+    }, (res) => {
+      let data = [];
+      res.on('data', (c) => data.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(data).toString();
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.status === 'ok' && parsed.endpoints) {
+            const server = parsed.endpoints.https || parsed.endpoints.http;
+            if (server && server !== '0.0.0.0:0') {
+              console.log(`[Bouncer] Found server: ${server} (region: ${bouncerRegion})`);
+              resolve({ server, token: parsed.token || null });
+            } else {
+              reject(new Error('Bouncer returned empty server'));
+            }
+          } else {
+            reject(new Error(`Bouncer error: ${text.slice(0, 200)}`));
+          }
+        } catch (e) {
+          reject(new Error(`Bouncer parse error: ${text.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Bouncer timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 module.exports = {
   PROTOCOL_VERSION,
   get CLIENT_VERSION() { return CLIENT_VERSION; },
@@ -221,4 +349,7 @@ module.exports = {
   parseEntities,
   parseBorders,
   fetchClientVersion,
+  findServer,
+  BOUNCER_HOST,
+  REGION_MAP,
 };
