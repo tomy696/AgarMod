@@ -8,80 +8,70 @@ let SocksProxyAgent, HttpsProxyAgent;
 try { SocksProxyAgent = require('socks-proxy-agent').SocksProxyAgent; } catch (_) {}
 try { HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent; } catch (_) {}
 
-// =============================================================================
-// bot-client.js - Headless Agar.io WebSocket bot client
-// =============================================================================
-
 const BOT_STATES = {
   DISCONNECTED: 'disconnected',
   CONNECTING: 'connecting',
-  CONNECTED: 'connected',
-  LOGGING_IN: 'logging_in',
+  HANDSHAKE: 'handshake',
+  ENCRYPTED: 'encrypted',
+  SPAWNING: 'spawning',
   IN_GAME: 'in_game',
   DEAD: 'dead',
 };
 
 class BotClient extends EventEmitter {
-  /**
-   * @param {object} config
-   * @param {string} config.name - Bot display name
-   * @param {number} config.id - Bot instance ID
-   * @param {string} [config.partyCode] - Party code to join
-   */
   constructor(config) {
     super();
     this.id = config.id;
     this.name = config.name || `Bot_${config.id}`;
     this.partyCode = config.partyCode || null;
 
-    // Connection state
     this.ws = null;
     this.state = BOT_STATES.DISCONNECTED;
     this.serverIP = null;
+    this.serverUrl = null;
 
-    // Game state
-    this.playerId = null;
-    this.ownCells = new Map();    // cellId -> { x, y, radius, mass }
-    this.visibleCells = new Map(); // cellId -> { x, y, radius, ownerId, name, isVirus, isFood, isEjected }
-    this.arenaWidth = 14142;
-    this.arenaHeight = 14142;
+    this.encryptionKey = 0;
+    this.decryptionKey = 0;
+    this.cellsIDs = [];
+    this.isAlive = false;
+    this.entities = {};
+    this.offsetX = 0;
+    this.offsetY = 0;
 
-    // Target tracking
     this.targetX = 0;
     this.targetY = 0;
+    this.mode = 'follow';
 
-    // Bot behavior
-    this.mode = 'move';
-    this._directionInterval = null;
-    this._behaviorInterval = null;
-    this._pingInterval = null;
-    this._reconnectTimeout = null;
+    this._moveInterval = null;
     this._respawnTimeout = null;
+    this._spawnDelay = null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Connection
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Connect to an Agar.io game server, optionally through a proxy.
-   * @param {string} serverIP - Server IP:port (e.g., "123.45.67.89:443")
-   * @param {{ url: string, type: string }|null} [proxy] - SOCKS5/HTTP proxy
-   */
   connect(serverIP, proxy) {
-    if (this.state !== BOT_STATES.DISCONNECTED) {
-      this.disconnect();
-    }
+    if (this.state !== BOT_STATES.DISCONNECTED) this.disconnect();
 
     this.serverIP = serverIP;
-    this.proxyUrl = proxy ? proxy.url : null;
     this.state = BOT_STATES.CONNECTING;
 
-    const url = serverIP.startsWith('ws://') || serverIP.startsWith('wss://')
+    this.encryptionKey = 0;
+    this.decryptionKey = 0;
+    this.cellsIDs = [];
+    this.isAlive = false;
+    this.entities = {};
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    let url = serverIP.startsWith('ws://') || serverIP.startsWith('wss://')
       ? serverIP
       : `wss://${serverIP}`;
 
-    const via = proxy ? ` via ${proxy.url.replace(/\/\/.*@/, '//*:*@')}` : ' (direct)';
+    if (this.partyCode && !url.includes('party_id=')) {
+      url += (url.includes('?') ? '&' : '?') + `party_id=${this.partyCode}`;
+    }
+
+    this.serverUrl = url;
+
+    const via = proxy ? ` via proxy` : ' (direct)';
     console.log(`[Bot ${this.id}] Connecting to ${url}${via}`);
 
     try {
@@ -91,13 +81,11 @@ class BotClient extends EventEmitter {
           'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
         },
         rejectUnauthorized: false,
-        handshakeTimeout: 10000,
+        handshakeTimeout: 15000,
       };
 
-      // Route through proxy if provided
       if (proxy) {
-        const isSocks = proxy.type === 'socks5' || proxy.type === 'socks4' ||
-                        proxy.url.startsWith('socks');
+        const isSocks = proxy.type === 'socks5' || proxy.type === 'socks4' || proxy.url.startsWith('socks');
         if (isSocks && SocksProxyAgent) {
           wsOpts.agent = new SocksProxyAgent(proxy.url);
         } else if (HttpsProxyAgent) {
@@ -106,7 +94,7 @@ class BotClient extends EventEmitter {
       }
 
       this.ws = new WebSocket(url, wsOpts);
-      this.ws.binaryType = 'arraybuffer';
+      this.ws.binaryType = 'nodebuffer';
 
       this.ws.on('open', () => this._onOpen());
       this.ws.on('message', (data) => this._onMessage(data));
@@ -119,665 +107,408 @@ class BotClient extends EventEmitter {
     }
   }
 
-  /**
-   * Disconnect from the server.
-   */
   disconnect() {
-    this._clearIntervals();
-
+    this._clearTimers();
     if (this.ws) {
-      try {
-        if (this.ws.readyState === WebSocket.OPEN) {
-          const msg = proto.buildDisconnect();
-          this.ws.send(msg);
-        }
-        this.ws.close();
-      } catch (e) {
-        // ignore close errors
-      }
+      try { this.ws.close(); } catch (_) {}
       this.ws = null;
     }
-
     this.state = BOT_STATES.DISCONNECTED;
-    this.ownCells.clear();
-    this.visibleCells.clear();
-    this.playerId = null;
+    this.isAlive = false;
+    this.cellsIDs = [];
     this.emit('disconnected');
   }
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
+  _send(buf, encrypt = false) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    try {
+      if (encrypt && this.encryptionKey) {
+        buf = proto.xorBytes(Buffer.from(buf), this.encryptionKey);
+        this.encryptionKey = proto.rotateKey(this.encryptionKey);
+      }
+      this.ws.send(buf);
+    } catch (err) {
+      console.error(`[Bot ${this.id}] Send error:`, err.message);
+    }
+  }
 
-  /**
-   * Send a direction vector to move the bot.
-   * @param {number} x - Target X coordinate in arena space.
-   * @param {number} y - Target Y coordinate in arena space.
-   */
-  sendDirection(x, y) {
-    if (this.state !== BOT_STATES.IN_GAME || !this.ws) return;
+  // ---- WebSocket handlers ----
 
-    // Compute direction vector from bot center to target
-    const center = this._getCenter();
-    const dx = x - center.x;
-    const dy = y - center.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  _onOpen() {
+    console.log(`[Bot ${this.id}] WebSocket open, sending handshake`);
+    this.state = BOT_STATES.HANDSHAKE;
+    this.emit('connected');
 
-    let nx = 0;
-    let ny = 0;
-    if (dist > 1) {
-      nx = dx / dist;
-      ny = dy / dist;
+    this._send(proto.buildProtocolVersion());
+    this._send(proto.buildClientVersion());
+  }
+
+  _onMessage(data) {
+    let buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+
+    if (this.decryptionKey) {
+      buffer = proto.xorBytes(Buffer.from(buffer), this.decryptionKey ^ proto.CLIENT_VERSION);
     }
 
-    this._send(proto.buildDirectionVector(nx, ny));
+    if (buffer.length < 1) return;
+    const opcode = buffer.readUInt8(0);
+
+    switch (opcode) {
+      case 241: this._handleEncryptionSetup(buffer); break;
+      case 242: this._handleSpawnRequest(); break;
+      case 32:  this._handleSpawnConfirm(buffer); break;
+      case 85:  this._handleCaptchaFail(); break;
+      case 255: this._handleCompressedData(buffer); break;
+      case 54:  break; // leaderboard
+      default:  break;
+    }
   }
 
-  /**
-   * Send a split action.
-   */
+  _onClose(code, reason) {
+    console.log(`[Bot ${this.id}] WebSocket closed: ${code}`);
+    this._clearTimers();
+    this.ws = null;
+    this.state = BOT_STATES.DISCONNECTED;
+    this.isAlive = false;
+    this.cellsIDs = [];
+    this.emit('disconnected', { code, reason: reason ? reason.toString() : '' });
+  }
+
+  _onError(err) {
+    console.error(`[Bot ${this.id}] WS error:`, err.message);
+    this.emit('error', err);
+  }
+
+  // ---- Protocol 22 handlers ----
+
+  _handleEncryptionSetup(buffer) {
+    const reader = new proto.Reader(buffer);
+    reader.readUint8(); // opcode 241
+
+    this.decryptionKey = reader.readInt32();
+
+    const serverName = reader.readString();
+
+    const hostname = this.serverUrl
+      .replace(/^wss?:\/\//, '')
+      .split(':')[0]
+      .split('?')[0]
+      .split('/')[0];
+
+    this.encryptionKey = proto.computeEncryptionKey(hostname, serverName);
+    this.state = BOT_STATES.ENCRYPTED;
+
+    console.log(`[Bot ${this.id}] Encryption established (host: ${hostname})`);
+  }
+
+  _handleSpawnRequest() {
+    console.log(`[Bot ${this.id}] Server ready, spawning as "${this.name}"`);
+    this.state = BOT_STATES.SPAWNING;
+    this._spawnDelay = setTimeout(() => {
+      this._send(proto.buildSpawn(this.name), true);
+    }, 500 + Math.random() * 1000);
+  }
+
+  _handleSpawnConfirm(buffer) {
+    const reader = new proto.Reader(buffer);
+    reader.readUint8(); // opcode 32
+    const cellId = reader.readUint32();
+    this.cellsIDs.push(cellId);
+    this.isAlive = true;
+    this.state = BOT_STATES.IN_GAME;
+
+    console.log(`[Bot ${this.id}] Spawned! cellId=${cellId}`);
+    this.emit('gameJoined');
+    this._startMoveLoop();
+  }
+
+  _handleCaptchaFail() {
+    console.log(`[Bot ${this.id}] Captcha required, disconnecting`);
+    this.disconnect();
+  }
+
+  _handleCompressedData(buffer) {
+    if (buffer.length < 5) return;
+    const uncompSize = buffer.readUInt32LE(1);
+    const compressed = buffer.slice(5);
+
+    const decompressed = proto.lz4Decompress(
+      new Uint8Array(compressed),
+      new Uint8Array(uncompSize)
+    );
+
+    if (!decompressed || !(decompressed instanceof Uint8Array)) return;
+    const decBuf = Buffer.from(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
+    if (decBuf.length < 1) return;
+
+    const subOpcode = decBuf.readUInt8(0);
+    const reader = new proto.Reader(decBuf);
+    reader.readUint8(); // skip sub-opcode
+
+    switch (subOpcode) {
+      case 16: this._parseEntities(reader); break;
+      case 64: this._parseBorders(reader); break;
+    }
+  }
+
+  _parseEntities(reader) {
+    try {
+      const eatCount = reader.readUint16();
+      for (let i = 0; i < eatCount; i++) {
+        reader.byteOffset += 8;
+      }
+
+      while (reader.byteOffset < reader.buffer.length - 4) {
+        const id = reader.readUint32();
+        if (id === 0) break;
+
+        const entity = {
+          id,
+          x: reader.readInt32(),
+          y: reader.readInt32(),
+          size: reader.readUint16(),
+          isVirus: false,
+          isPellet: false,
+          name: '',
+        };
+
+        const flags = reader.readUint8();
+        const extFlags = (flags & 128) ? reader.readUint8() : 0;
+        if (flags & 1) entity.isVirus = true;
+        if (flags & 2) reader.byteOffset += 3;
+        if (flags & 4) reader.readString();
+        if (flags & 8) entity.name = reader.readString();
+        if (extFlags & 1) entity.isPellet = true;
+        if (extFlags & 4) reader.byteOffset += 4;
+
+        this.entities[id] = entity;
+      }
+
+      if (reader.byteOffset + 2 <= reader.buffer.length) {
+        const removeCount = reader.readUint16();
+        for (let i = 0; i < removeCount && reader.byteOffset + 4 <= reader.buffer.length; i++) {
+          const id = reader.readUint32();
+          delete this.entities[id];
+          const idx = this.cellsIDs.indexOf(id);
+          if (idx !== -1) this.cellsIDs.splice(idx, 1);
+        }
+      }
+
+      if (this.isAlive && this.cellsIDs.length === 0) {
+        console.log(`[Bot ${this.id}] Died, respawning in 3s`);
+        this.isAlive = false;
+        this.state = BOT_STATES.DEAD;
+        this.emit('gameOver');
+        this._respawnTimeout = setTimeout(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN && this.encryptionKey) {
+            this._send(proto.buildSpawn(this.name), true);
+          }
+        }, 3000 + Math.random() * 2000);
+      }
+    } catch (e) {
+      // malformed packet, ignore
+    }
+  }
+
+  _parseBorders(reader) {
+    try {
+      const left = reader.readDouble();
+      const top = reader.readDouble();
+      const right = reader.readDouble();
+      const bottom = reader.readDouble();
+      if (~~(right - left) === 14142 && ~~(bottom - top) === 14142) {
+        this.offsetX = (left + right) / 2;
+        this.offsetY = (top + bottom) / 2;
+      }
+    } catch (_) {}
+  }
+
+  // ---- Actions ----
+
+  sendDirection(x, y) {
+    if (!this.isAlive || !this.encryptionKey) return;
+    this._send(proto.buildMove(
+      Math.round(x + this.offsetX),
+      Math.round(y + this.offsetY),
+      this.decryptionKey
+    ), true);
+  }
+
   sendSplit() {
-    if (this.state !== BOT_STATES.IN_GAME || !this.ws) return;
-    this._send(proto.buildPlayerSplit());
+    if (!this.isAlive || !this.encryptionKey) return;
+    this._send(proto.buildSplit(), true);
   }
 
-  /**
-   * Send a shoot-mass (eject/feed) action.
-   */
   sendShootMass() {
-    if (this.state !== BOT_STATES.IN_GAME || !this.ws) return;
-    this._send(proto.buildShootMass());
+    if (!this.isAlive || !this.encryptionKey) return;
+    this._send(proto.buildEjectMass(), true);
   }
 
-  /**
-   * Update the movement target coordinates.
-   * @param {number} x
-   * @param {number} y
-   */
   updateTarget(x, y) {
     this.targetX = x;
     this.targetY = y;
   }
 
-  /**
-   * Set the bot behavior mode.
-   * @param {string} mode - "move"|"feed"|"farm"|"makevirus"|"breakvirus"|"teamer"
-   */
   setMode(mode) {
     this.mode = mode;
-    this._restartBehavior();
   }
 
-  // ---------------------------------------------------------------------------
-  // WebSocket event handlers
-  // ---------------------------------------------------------------------------
+  // ---- Movement loop ----
 
-  _onOpen() {
-    console.log(`[Bot ${this.id}] WebSocket connected`);
-    this.state = BOT_STATES.CONNECTED;
-    this.emit('connected');
-
-    // Send login/connect handshake
-    this._send(proto.buildLoginRequestV5(this.name));
-    this.state = BOT_STATES.LOGGING_IN;
-
-    // Start ping keepalive
-    this._pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this._send(proto.buildPing());
-      }
-    }, 5000);
-  }
-
-  _onMessage(data) {
-    const buf = Buffer.from(data);
-    const msg = proto.parseServerMessage(buf);
-    if (!msg) return;
-
-    switch (msg.type) {
-      case proto.REQ_TYPE.LOGIN_RESPONSE:
-        this._handleLoginResponse(msg.fields);
-        break;
-      case proto.REQ_TYPE.CONNECT_RESPONSE:
-        this._handleConnectResponse(msg.fields);
-        break;
-      case proto.REQ_TYPE.GAME_ENTER_RESPONSE:
-        this._handleGameEnterResponse(msg.fields);
-        break;
-      case proto.REQ_TYPE.GAME_JOINED:
-        this._handleGameJoined(msg.fields);
-        break;
-      case proto.REQ_TYPE.GAME_ARENA_STATE:
-        this._handleArenaState(msg.fields);
-        break;
-      case proto.REQ_TYPE.GAME_ARENA_LEADERBOARD:
-        this._handleLeaderboard(msg.fields);
-        break;
-      case proto.REQ_TYPE.PONG:
-        // Keepalive response, nothing to do
-        break;
-      case proto.REQ_TYPE.GAME_OVER:
-        this._handleGameOver();
-        break;
-      case proto.REQ_TYPE.DISCONNECT:
-        console.log(`[Bot ${this.id}] Server sent disconnect`);
-        this.disconnect();
-        break;
-      case proto.REQ_TYPE.SERVER_GOING_OFFLINE:
-        console.log(`[Bot ${this.id}] Server going offline`);
-        this.disconnect();
-        break;
-      default:
-        // Unhandled message type
-        break;
-    }
-  }
-
-  _onClose(code, reason) {
-    console.log(`[Bot ${this.id}] WebSocket closed: ${code} ${reason || ''}`);
-    this._clearIntervals();
-    this.ws = null;
-    const wasInGame = this.state === BOT_STATES.IN_GAME;
-    this.state = BOT_STATES.DISCONNECTED;
-    this.ownCells.clear();
-    this.visibleCells.clear();
-    this.emit('disconnected', { code, reason: reason ? reason.toString() : '', wasInGame });
-  }
-
-  _onError(err) {
-    console.error(`[Bot ${this.id}] WebSocket error:`, err.message);
-    this.emit('error', err);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Message handlers
-  // ---------------------------------------------------------------------------
-
-  _handleLoginResponse(fields) {
-    const result = proto.parseLoginResponse(fields);
-    console.log(`[Bot ${this.id}] Login response: success=${result.success}`);
-    if (result.success) {
-      // Send connect request
-      this._send(proto.buildConnectRequest());
-    }
-  }
-
-  _handleConnectResponse(fields) {
-    const result = proto.parseConnectResponse(fields);
-    console.log(`[Bot ${this.id}] Connect response: success=${result.success}`);
-    if (result.success) {
-      // Send game enter request
-      this._send(proto.buildGameEnterRequest(this.name, null, this.partyCode));
-    }
-  }
-
-  _handleGameEnterResponse(fields) {
-    const result = proto.parseGameEnterResponse(fields);
-    console.log(`[Bot ${this.id}] Game enter response: success=${result.success}, playerId=${result.playerId}`);
-    if (result.success) {
-      this.playerId = result.playerId;
-    }
-  }
-
-  _handleGameJoined(fields) {
-    const result = proto.parseGameJoined(fields);
-    console.log(`[Bot ${this.id}] Game joined: arena=${result.arenaId}, size=${result.arenaWidth}x${result.arenaHeight}`);
-    this.arenaWidth = result.arenaWidth;
-    this.arenaHeight = result.arenaHeight;
-    this.state = BOT_STATES.IN_GAME;
-    this.emit('gameJoined', result);
-    this._startBehavior();
-  }
-
-  _handleArenaState(fields) {
-    const result = proto.parseGameArenaState(fields);
-
-    // Update visible cells
-    for (const cell of result.cells) {
-      this.visibleCells.set(cell.id, cell);
-
-      // Track own cells
-      if (this.playerId && cell.ownerId === this.playerId) {
-        this.ownCells.set(cell.id, {
-          x: cell.x,
-          y: cell.y,
-          radius: cell.radius,
-          mass: Math.floor(cell.radius * cell.radius / 100),
-        });
-      }
-    }
-
-    // Remove dead/disappeared cells
-    for (const deadId of result.deaths) {
-      this.visibleCells.delete(deadId);
-      this.ownCells.delete(deadId);
-    }
-
-    // If all own cells are gone, we died
-    if (this.state === BOT_STATES.IN_GAME && this.playerId && this.ownCells.size === 0) {
-      // Check if we actually had cells before (avoid false trigger on first update)
-      // The game_over message handles the official death, but this catches edge cases
-    }
-
-    this.emit('arenaState', result);
-  }
-
-  _handleLeaderboard(fields) {
-    const result = proto.parseLeaderboard(fields);
-    this.emit('leaderboard', result);
-  }
-
-  _handleGameOver() {
-    console.log(`[Bot ${this.id}] Game over`);
-    this.state = BOT_STATES.DEAD;
-    this.ownCells.clear();
-    this.emit('gameOver');
-
-    // Auto-respawn after a delay
-    this._respawnTimeout = setTimeout(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log(`[Bot ${this.id}] Respawning`);
-        this.state = BOT_STATES.CONNECTED;
-        this._send(proto.buildGameEnterRequest(this.name, null, this.partyCode));
-      }
-    }, 2000 + Math.random() * 3000);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Bot behaviors
-  // ---------------------------------------------------------------------------
-
-  _startBehavior() {
-    this._clearBehaviorIntervals();
-
-    // Direction update loop (every 50ms as specified)
-    this._directionInterval = setInterval(() => {
-      if (this.state !== BOT_STATES.IN_GAME) return;
+  _startMoveLoop() {
+    if (this._moveInterval) clearInterval(this._moveInterval);
+    this._moveInterval = setInterval(() => {
+      if (!this.isAlive) return;
       this._executeBehavior();
-    }, 50);
-  }
-
-  _restartBehavior() {
-    if (this.state === BOT_STATES.IN_GAME) {
-      this._startBehavior();
-    }
+    }, 40);
   }
 
   _executeBehavior() {
     switch (this.mode) {
-      case 'move':
-        this._behaviorMove();
-        break;
-      case 'feed':
-        this._behaviorFeed();
-        break;
-      case 'farm':
-        this._behaviorFarm();
-        break;
-      case 'makevirus':
-        this._behaviorMakeVirus();
-        break;
-      case 'breakvirus':
-        this._behaviorBreakVirus();
-        break;
-      case 'teamer':
-        this._behaviorTeamer();
-        break;
-      default:
-        this._behaviorMove();
-        break;
+      case 'follow': this._behaviorFollow(); break;
+      case 'feed':   this._behaviorFeed(); break;
+      case 'teamer': this._behaviorTeamer(); break;
+      case 'ai':     this._behaviorAI(); break;
+      case 'random': this._behaviorRandom(); break;
+      default:       this._behaviorFollow(); break;
     }
   }
 
-  /**
-   * MOVE mode: Follow target coordinates (sent by the player's tweak).
-   */
-  _behaviorMove() {
+  _behaviorFollow() {
     this.sendDirection(this.targetX, this.targetY);
   }
 
-  /**
-   * FEED mode: Move near the player's target position, then repeatedly eject mass.
-   */
   _behaviorFeed() {
     const center = this._getCenter();
-    const dx = this.targetX - center.x;
-    const dy = this.targetY - center.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    // Move toward target
+    const dist = this._distance(center.x, center.y, this.targetX, this.targetY);
     this.sendDirection(this.targetX, this.targetY);
-
-    // If close enough, start feeding (ejecting mass)
-    if (dist < 300) {
-      this.sendShootMass();
-    }
+    if (dist < 300) this.sendShootMass();
   }
 
-  /**
-   * FARM mode: Wander randomly, eat food pellets, split on smaller cells.
-   */
-  _behaviorFarm() {
-    const center = this._getCenter();
-    const totalMass = this._getTotalMass();
-
-    // Find nearest food
-    let nearestFood = null;
-    let nearestFoodDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isFood || cell.isEjected) {
-        const d = this._distance(center.x, center.y, cell.x, cell.y);
-        if (d < nearestFoodDist) {
-          nearestFoodDist = d;
-          nearestFood = cell;
-        }
-      }
-    }
-
-    // Find smaller enemies to split-kill
-    let splitTarget = null;
-    let splitTargetDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isFood || cell.isVirus || cell.isEjected) continue;
-      if (cell.ownerId === this.playerId) continue;
-      const cellMass = cell.radius * cell.radius / 100;
-      // Can eat if our mass > 1.25x theirs, and split-kill range
-      if (totalMass > cellMass * 2.5 && cellMass > 10) {
-        const d = this._distance(center.x, center.y, cell.x, cell.y);
-        if (d < splitTargetDist && d < 800) {
-          splitTargetDist = d;
-          splitTarget = cell;
-        }
-      }
-    }
-
-    // Avoid viruses
-    let avoidX = 0;
-    let avoidY = 0;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isVirus && totalMass > 150) {
-        const d = this._distance(center.x, center.y, cell.x, cell.y);
-        if (d < 300) {
-          avoidX += (center.x - cell.x) * 2;
-          avoidY += (center.y - cell.y) * 2;
-        }
-      }
-    }
-
-    if (splitTarget && this.ownCells.size < 8) {
-      // Split-kill smaller cells
-      this.sendDirection(splitTarget.x, splitTarget.y);
-      if (splitTargetDist < 500) {
-        this.sendSplit();
-      }
-    } else if (nearestFood) {
-      // Eat food
-      this.sendDirection(
-        nearestFood.x + avoidX,
-        nearestFood.y + avoidY
-      );
-    } else {
-      // Wander randomly
-      const wanderX = center.x + (Math.random() - 0.5) * 2000 + avoidX;
-      const wanderY = center.y + (Math.random() - 0.5) * 2000 + avoidY;
-      this.sendDirection(
-        Math.max(0, Math.min(this.arenaWidth, wanderX)),
-        Math.max(0, Math.min(this.arenaHeight, wanderY))
-      );
-    }
-  }
-
-  /**
-   * MAKEVIRUS mode: Find viruses and feed them toward enemies.
-   */
-  _behaviorMakeVirus() {
-    const center = this._getCenter();
-
-    // Find nearest virus
-    let nearestVirus = null;
-    let nearestVirusDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isVirus) {
-        const d = this._distance(center.x, center.y, cell.x, cell.y);
-        if (d < nearestVirusDist) {
-          nearestVirusDist = d;
-          nearestVirus = cell;
-        }
-      }
-    }
-
-    // Find nearest enemy (to aim the virus toward)
-    let nearestEnemy = null;
-    let nearestEnemyDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isFood || cell.isVirus || cell.isEjected) continue;
-      if (cell.ownerId === this.playerId) continue;
-      const d = this._distance(center.x, center.y, cell.x, cell.y);
-      if (d < nearestEnemyDist) {
-        nearestEnemyDist = d;
-        nearestEnemy = cell;
-      }
-    }
-
-    if (nearestVirus && nearestEnemy) {
-      // Position between virus and enemy, then feed virus
-      const virusToEnemyX = nearestEnemy.x - nearestVirus.x;
-      const virusToEnemyY = nearestEnemy.y - nearestVirus.y;
-      const dist = Math.sqrt(virusToEnemyX * virusToEnemyX + virusToEnemyY * virusToEnemyY);
-
-      if (dist > 0) {
-        // Move behind the virus (opposite side from enemy)
-        const behindX = nearestVirus.x - (virusToEnemyX / dist) * 200;
-        const behindY = nearestVirus.y - (virusToEnemyY / dist) * 200;
-
-        const dToPos = this._distance(center.x, center.y, behindX, behindY);
-        if (dToPos > 100) {
-          this.sendDirection(behindX, behindY);
-        } else {
-          // In position, aim at virus and feed
-          this.sendDirection(nearestVirus.x, nearestVirus.y);
-          this.sendShootMass();
-        }
-      }
-    } else if (nearestVirus) {
-      // No enemy visible, move near virus
-      this.sendDirection(nearestVirus.x, nearestVirus.y);
-    } else {
-      // No virus found, wander
-      this.sendDirection(this.targetX, this.targetY);
-    }
-  }
-
-  /**
-   * BREAKVIRUS mode: Find viruses near the player and pop them by shooting mass.
-   */
-  _behaviorBreakVirus() {
-    const center = this._getCenter();
-
-    // Find nearest virus near the target/player position
-    let nearestVirus = null;
-    let nearestVirusDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isVirus) {
-        const dToTarget = this._distance(this.targetX, this.targetY, cell.x, cell.y);
-        if (dToTarget < 1000) {
-          const dToSelf = this._distance(center.x, center.y, cell.x, cell.y);
-          if (dToSelf < nearestVirusDist) {
-            nearestVirusDist = dToSelf;
-            nearestVirus = cell;
-          }
-        }
-      }
-    }
-
-    if (nearestVirus) {
-      if (nearestVirusDist > 200) {
-        // Move toward the virus
-        this.sendDirection(nearestVirus.x, nearestVirus.y);
-      } else {
-        // Close enough, feed into it to pop it
-        this.sendDirection(nearestVirus.x, nearestVirus.y);
-        this.sendShootMass();
-      }
-    } else {
-      // No virus near player, follow player
-      this.sendDirection(this.targetX, this.targetY);
-    }
-  }
-
-  /**
-   * TEAMER mode: Follow player closely, feed mass to player, split-kill
-   * enemies near player.
-   */
   _behaviorTeamer() {
     const center = this._getCenter();
     const totalMass = this._getTotalMass();
-
-    // Follow the player (target position)
     const dToPlayer = this._distance(center.x, center.y, this.targetX, this.targetY);
 
-    // Find enemies near the player
     let nearestThreat = null;
     let nearestThreatDist = Infinity;
-    for (const [, cell] of this.visibleCells) {
-      if (cell.isFood || cell.isVirus || cell.isEjected) continue;
-      if (cell.ownerId === this.playerId) continue;
-      const cellMass = cell.radius * cell.radius / 100;
-      const dToTarget = this._distance(this.targetX, this.targetY, cell.x, cell.y);
+    for (const id in this.entities) {
+      const e = this.entities[id];
+      if (e.isPellet || e.isVirus) continue;
+      if (this.cellsIDs.includes(e.id)) continue;
+      const eMass = e.size * e.size / 100;
+      const dToTarget = this._distance(this.targetX, this.targetY, e.x - this.offsetX, e.y - this.offsetY);
       if (dToTarget < 1500) {
-        const dToSelf = this._distance(center.x, center.y, cell.x, cell.y);
-        // Can split-kill if we're big enough
-        if (totalMass > cellMass * 2.5 && dToSelf < nearestThreatDist) {
+        const dToSelf = this._distance(center.x, center.y, e.x - this.offsetX, e.y - this.offsetY);
+        if (totalMass > eMass * 2.5 && dToSelf < nearestThreatDist) {
           nearestThreatDist = dToSelf;
-          nearestThreat = cell;
+          nearestThreat = e;
         }
       }
     }
 
-    if (nearestThreat && nearestThreatDist < 700 && this.ownCells.size < 4) {
-      // Split-kill enemy near player
-      this.sendDirection(nearestThreat.x, nearestThreat.y);
+    if (nearestThreat && nearestThreatDist < 700 && this.cellsIDs.length < 4) {
+      this.sendDirection(nearestThreat.x - this.offsetX, nearestThreat.y - this.offsetY);
       this.sendSplit();
     } else if (dToPlayer > 400) {
-      // Follow player closely
       this.sendDirection(this.targetX, this.targetY);
-    } else if (dToPlayer < 300) {
-      // Close to player, feed mass
+    } else if (dToPlayer < 300 && totalMass > 50) {
       this.sendDirection(this.targetX, this.targetY);
-      if (totalMass > 50) {
-        this.sendShootMass();
-      }
+      this.sendShootMass();
     } else {
-      // Stay near player
       this.sendDirection(this.targetX, this.targetY);
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
+  _behaviorAI() {
+    const center = this._getCenter();
+    const totalMass = this._getTotalMass();
 
-  /**
-   * Get the center position of all own cells (mass-weighted).
-   * @returns {{ x: number, y: number }}
-   */
-  _getCenter() {
-    if (this.ownCells.size === 0) {
-      return { x: this.arenaWidth / 2, y: this.arenaHeight / 2 };
+    let nearestFood = null;
+    let nearestFoodDist = Infinity;
+    let nearestDanger = null;
+    let nearestDangerDist = Infinity;
+
+    for (const id in this.entities) {
+      const e = this.entities[id];
+      const ex = e.x - this.offsetX;
+      const ey = e.y - this.offsetY;
+      const d = this._distance(center.x, center.y, ex, ey);
+
+      if (e.isPellet) {
+        if (d < nearestFoodDist) { nearestFoodDist = d; nearestFood = e; }
+      } else if (!e.isVirus && !this.cellsIDs.includes(e.id)) {
+        const eMass = e.size * e.size / 100;
+        if (eMass > totalMass * 1.25 && d < 420 && d < nearestDangerDist) {
+          nearestDangerDist = d; nearestDanger = e;
+        }
+      }
     }
-    let totalX = 0;
-    let totalY = 0;
-    let totalMass = 0;
-    for (const [, cell] of this.ownCells) {
-      const mass = cell.mass || 1;
-      totalX += cell.x * mass;
-      totalY += cell.y * mass;
-      totalMass += mass;
+
+    if (nearestDanger) {
+      const dx = center.x - (nearestDanger.x - this.offsetX);
+      const dy = center.y - (nearestDanger.y - this.offsetY);
+      this.sendDirection(center.x + dx * 3, center.y + dy * 3);
+    } else if (nearestFood) {
+      this.sendDirection(nearestFood.x - this.offsetX, nearestFood.y - this.offsetY);
+    } else {
+      this._behaviorRandom();
     }
-    return {
-      x: totalX / totalMass,
-      y: totalY / totalMass,
-    };
   }
 
-  /**
-   * Get the total mass across all own cells.
-   * @returns {number}
-   */
+  _behaviorRandom() {
+    if (!this._randomTarget || Math.random() < 0.02) {
+      this._randomTarget = {
+        x: (Math.random() - 0.5) * 14000,
+        y: (Math.random() - 0.5) * 14000,
+      };
+    }
+    this.sendDirection(this._randomTarget.x, this._randomTarget.y);
+  }
+
+  // ---- Helpers ----
+
+  _getCenter() {
+    if (this.cellsIDs.length === 0) return { x: 0, y: 0 };
+    let tx = 0, ty = 0, count = 0;
+    for (const cid of this.cellsIDs) {
+      const e = this.entities[cid];
+      if (e) {
+        tx += e.x - this.offsetX;
+        ty += e.y - this.offsetY;
+        count++;
+      }
+    }
+    return count > 0 ? { x: tx / count, y: ty / count } : { x: 0, y: 0 };
+  }
+
   _getTotalMass() {
     let total = 0;
-    for (const [, cell] of this.ownCells) {
-      total += cell.mass || 0;
+    for (const cid of this.cellsIDs) {
+      const e = this.entities[cid];
+      if (e) total += Math.floor(e.size * e.size / 100);
     }
     return total;
   }
 
-  /**
-   * Euclidean distance between two points.
-   * @param {number} x1
-   * @param {number} y1
-   * @param {number} x2
-   * @param {number} y2
-   * @returns {number}
-   */
   _distance(x1, y1, x2, y2) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
+    const dx = x2 - x1, dy = y2 - y1;
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  /**
-   * Send a binary buffer over the WebSocket.
-   * @param {Buffer} buf
-   */
-  _send(buf) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      try {
-        this.ws.send(buf);
-      } catch (err) {
-        console.error(`[Bot ${this.id}] Send error:`, err.message);
-      }
-    }
+  _clearTimers() {
+    if (this._moveInterval) { clearInterval(this._moveInterval); this._moveInterval = null; }
+    if (this._respawnTimeout) { clearTimeout(this._respawnTimeout); this._respawnTimeout = null; }
+    if (this._spawnDelay) { clearTimeout(this._spawnDelay); this._spawnDelay = null; }
   }
 
-  _clearBehaviorIntervals() {
-    if (this._directionInterval) {
-      clearInterval(this._directionInterval);
-      this._directionInterval = null;
-    }
-    if (this._behaviorInterval) {
-      clearInterval(this._behaviorInterval);
-      this._behaviorInterval = null;
-    }
-  }
-
-  _clearIntervals() {
-    this._clearBehaviorIntervals();
-    if (this._pingInterval) {
-      clearInterval(this._pingInterval);
-      this._pingInterval = null;
-    }
-    if (this._reconnectTimeout) {
-      clearTimeout(this._reconnectTimeout);
-      this._reconnectTimeout = null;
-    }
-    if (this._respawnTimeout) {
-      clearTimeout(this._respawnTimeout);
-      this._respawnTimeout = null;
-    }
-  }
-
-  /**
-   * Get the current status of this bot.
-   * @returns {object}
-   */
   getStatus() {
     return {
       id: this.id,
       name: this.name,
       state: this.state,
       mode: this.mode,
-      cells: this.ownCells.size,
+      cells: this.cellsIDs.length,
       mass: this._getTotalMass(),
       position: this._getCenter(),
     };

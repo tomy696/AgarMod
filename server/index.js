@@ -18,8 +18,10 @@ const BotManager = require('./bot-manager');
 //   POST /getsecretkey.php — Secret key validation
 // =============================================================================
 
+const { fetchClientVersion } = require('./protocol');
+
 const app = express();
-const PORT = parseInt(process.env.PORT, 10) || 3000;
+const PORT = parseInt(process.env.PORT, 10) || 3001;
 const botManager = new BotManager();
 
 // Load proxies from env var (for Railway/cloud) or file (for local)
@@ -169,13 +171,28 @@ app.post('/api', (req, res) => {
 //   target_x/target_y — player position for bot targeting
 // ---------------------------------------------------------------------------
 
+const REGION_TO_SERVER = {
+  'eu-west-2': 'eu-west-2.mobile-live-v26.agario.miniclippt.com',
+  'eu-west-3': 'eu-west-3.mobile-live-v26.agario.miniclippt.com',
+  'eu-central-1': 'eu-central-1.mobile-live-v26.agario.miniclippt.com',
+  'us-east-1': 'us-east-1.mobile-live-v26.agario.miniclippt.com',
+  'us-east-2': 'us-east-2.mobile-live-v26.agario.miniclippt.com',
+  'us-west-1': 'us-west-1.mobile-live-v26.agario.miniclippt.com',
+  'sa-east-1': 'sa-east-1.mobile-live-v26.agario.miniclippt.com',
+  'ap-northeast-1': 'ap-northeast-1.mobile-live-v26.agario.miniclippt.com',
+  'ap-southeast-1': 'ap-southeast-1.mobile-live-v26.agario.miniclippt.com',
+  'me-south-1': 'me-south-1.mobile-live-v26.agario.miniclippt.com',
+};
+
 app.post('/botter2.php', (req, res) => {
   const {
     action,
     state: stateParam,
     session_id: sessionId,
     targetip: targetIP,
-    mode = 'move',
+    region,
+    game_mode: gameMode,
+    mode = 'follow',
     bot_name: botName = 'Bot',
     bot_count: botCountRaw = '1',
     party_code: partyCode,
@@ -185,12 +202,12 @@ app.post('/botter2.php', (req, res) => {
     target_y: targetYRaw = '0',
   } = req.body;
 
-  // BiteYt uses 'state' parameter, our tweak sends 'action' — support both
   const cmd = stateParam || action || '';
   const botCount = parseInt(botCountRaw, 10) || 1;
   const targetX = parseFloat(targetXRaw) || 0;
   const targetY = parseFloat(targetYRaw) || 0;
   const code = partyCode || party || undefined;
+  const resolvedIP = targetIP || REGION_TO_SERVER[region] || '';
 
   if (!sessionId) {
     return res.json({
@@ -206,18 +223,20 @@ app.post('/botter2.php', (req, res) => {
 
   switch (cmd) {
     case 'start': {
-      if (!targetIP) {
+      if (!resolvedIP) {
         return res.json({
           api_response: false,
           status: 'error',
           title: 'Error',
-          text: 'Missing targetip',
+          text: 'Missing targetip or region',
         });
       }
 
+      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, party: ${code || 'none'})`);
+
       const result = botManager.startBots({
         sessionId,
-        targetIP,
+        targetIP: resolvedIP,
         mode,
         botName,
         botCount,
@@ -384,16 +403,16 @@ app.post('/admin/reload-proxies', (req, res) => {
 // Start
 // ---------------------------------------------------------------------------
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   const proxyStats = botManager.proxyPool.getStats();
+  const clientVer = await fetchClientVersion();
   console.log('='.repeat(60));
-  console.log('  Agar.io Bot Server (BiteYt-compatible)');
-  console.log(`  Port:        ${PORT}`);
-  console.log(`  Proxies:     ${proxyStats.alive}/${proxyStats.total} alive`);
-  console.log(`  API:         http://localhost:${PORT}/api`);
-  console.log(`  Bot control: http://localhost:${PORT}/botter2.php`);
-  console.log(`  Secret key:  http://localhost:${PORT}/getsecretkey.php`);
-  console.log(`  Health:      http://localhost:${PORT}/health`);
+  console.log('  XRD Bot Server (Protocol 22)');
+  console.log(`  Port:           ${PORT}`);
+  console.log(`  Client Version: ${clientVer}`);
+  console.log(`  Proxies:        ${proxyStats.alive}/${proxyStats.total} alive`);
+  console.log(`  Dashboard:      http://localhost:${PORT}/`);
+  console.log(`  Health:         http://localhost:${PORT}/health`);
   console.log('='.repeat(60));
 });
 

@@ -247,8 +247,9 @@ class BotManager {
     for (const [, bot] of session.bots) {
       const status = bot.getStatus();
       botStatuses.push(status);
-      if (status.state === BOT_STATES.CONNECTED ||
-          status.state === BOT_STATES.LOGGING_IN ||
+      if (status.state === BOT_STATES.HANDSHAKE ||
+          status.state === BOT_STATES.ENCRYPTED ||
+          status.state === BOT_STATES.SPAWNING ||
           status.state === BOT_STATES.IN_GAME) {
         connected++;
       }
