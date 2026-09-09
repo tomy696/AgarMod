@@ -300,7 +300,7 @@
     <p>Agar.io bot management dashboard</p>
   </div>
   <div class="topnav-right">
-    <a class="nav-btn" onclick="testBouncer()">Test Bouncer</a>
+    <a class="nav-btn" onclick="testMobileAPI()">Test Mobile API</a>
     <a class="nav-btn" onclick="clearUID()">New Session</a>
   </div>
 </div>
@@ -347,8 +347,18 @@
     </div>
 
     <div class="field">
-      <label>Party Code (optional)</label>
-      <input type="text" id="partyCode" placeholder="Paste party code to join your game" autocomplete="off">
+      <label>Game Mode</label>
+      <select id="gameMode">
+        <option value="ffa" selected>FFA (Classic)</option>
+        <option value="teams">Teams</option>
+        <option value="battleroyale">Battle Royale</option>
+        <option value="experimental">Experimental</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Party Code (optional — bots join YOUR server)</label>
+      <input type="text" id="partyCode" placeholder="Ex: 5DNGG9" autocomplete="off" style="text-transform:uppercase">
     </div>
   </div>
 
@@ -412,7 +422,8 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <span style="font-size:12px;color:var(--text2)"><span class="conn-dot ok" id="connDot"></span><span id="connLabel">Connected</span></span>
-        <button class="test-btn" onclick="testBouncer()">Test Bouncer</button>
+        <button class="test-btn" onclick="testMobileAPI()">Test Mobile API</button>
+        <button class="test-btn" onclick="testBouncer()">Test Web Bouncer</button>
       </div>
     </div>
 
@@ -443,6 +454,7 @@ const $customIPGroup = $('customIPGroup');
 const $ip = $('targetIP');
 const $name = $('botName');
 const $mode = $('botMode');
+const $gameMode = $('gameMode');
 const $count = $('botCount');
 const $countLabel = $('botCountLabel');
 const $party = $('partyCode');
@@ -540,23 +552,41 @@ function clearUID() {
   log('New session: ' + sessionId.slice(0, 8), 'info');
 }
 
-async function testBouncer() {
+async function testMobileAPI() {
   const region = $region.value || 'eu-west-2';
-  log('Testing bouncer for region: ' + region + '...', 'info');
-  const res = await apiGet('/debug/bouncer?region=' + encodeURIComponent(region));
+  const mode = $gameMode.value || 'ffa';
+  const party = $party.value.trim();
+  log('Testing Mobile API (mc-api.agar.io): region=' + region + ', mode=' + mode + (party ? ', party=' + party : '') + '...', 'info');
+  const url = '/debug/mobile?region=' + encodeURIComponent(region) + '&mode=' + encodeURIComponent(mode) + (party ? '&party=' + encodeURIComponent(party) : '');
+  const res = await apiGet(url);
   if (!res) {
-    log('Bouncer test failed: no response from server', 'error');
+    log('Mobile API test failed: no response', 'error');
     return;
   }
   if (res.status === 'ok') {
-    log('Bouncer OK! Server: ' + res.server, 'success');
-    log('WebSocket URL: ' + res.ws_url, 'info');
-    log('Client version: ' + res.client_version, 'info');
+    log('Mobile API OK! Server: ' + res.server, 'success');
+    log('WebSocket URL: ' + res.ws_url, 'success');
+    if (res.token) log('Token: ' + res.token.slice(0, 20) + '...', 'info');
   } else {
-    log('Bouncer FAILED: ' + res.error, 'error');
-    log('Client version: ' + res.client_version, 'info');
+    log('Mobile API FAILED: ' + res.error, 'error');
   }
-  // Also fetch server logs to show bouncer debug output
+  setTimeout(fetchServerLogs, 500);
+}
+
+async function testBouncer() {
+  const region = $region.value || 'eu-west-2';
+  log('Testing Web Bouncer for region: ' + region + '...', 'info');
+  const res = await apiGet('/debug/bouncer?region=' + encodeURIComponent(region));
+  if (!res) {
+    log('Web Bouncer test failed: no response from server', 'error');
+    return;
+  }
+  if (res.status === 'ok') {
+    log('Web Bouncer OK! Server: ' + res.server, 'info');
+    log('WebSocket URL: ' + res.ws_url, 'info');
+  } else {
+    log('Web Bouncer FAILED: ' + res.error, 'error');
+  }
   setTimeout(fetchServerLogs, 500);
 }
 
@@ -579,6 +609,7 @@ async function startBots() {
     targetip: region ? undefined : ip,
     region: region || undefined,
     mode: $mode.value,
+    game_mode: $gameMode.value,
     bot_name: $name.value,
     bot_count: count,
     party_code: party || undefined,

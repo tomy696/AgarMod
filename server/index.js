@@ -465,6 +465,39 @@ app.get('/debug/bouncer', async (req, res) => {
   }
 });
 
+app.get('/debug/mobile', async (req, res) => {
+  const region = req.query.region || 'eu-west-2';
+  const mode = req.query.mode || 'ffa';
+  const party = req.query.party || null;
+
+  console.log(`[Debug] Testing Mobile API: region=${region}, mode=${mode}, party=${party || 'none'}`);
+
+  try {
+    const result = await proto2.findMobileServer(region, mode, party);
+    console.log(`[Debug] Mobile API success: ${JSON.stringify(result)}`);
+    res.json({
+      status: 'ok',
+      api: 'mc-api.agar.io',
+      region,
+      mode,
+      party: party || null,
+      server: result.server,
+      token: result.token,
+      ws_url: result.server.startsWith('wss://') ? result.server : `wss://${result.server}`,
+    });
+  } catch (err) {
+    console.error(`[Debug] Mobile API failed:`, err.message);
+    res.json({
+      status: 'error',
+      api: 'mc-api.agar.io',
+      region,
+      mode,
+      party: party || null,
+      error: err.message,
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------

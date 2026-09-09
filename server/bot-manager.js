@@ -52,21 +52,31 @@ class BotManager {
 
     const count = Math.max(1, Math.min(100, botCount));
 
-    // Resolve server URL ONCE via bouncer (instead of each bot calling individually)
+    // Resolve server URL ONCE via mobile API (instead of each bot calling individually)
     let resolvedUrl = targetIP;
     const isRegion = !targetIP.startsWith('ws') && !targetIP.includes('/') && !targetIP.includes('.');
     if (isRegion) {
       try {
-        console.log(`[BotManager] Resolving server for region=${targetIP}, party=${partyCode || 'none'}, mode=${config.gameMode || 'ffa'}`);
-        const { server } = await proto.findServer(targetIP, config.gameMode || 'ffa', partyCode);
-        resolvedUrl = `wss://${server}`;
-        if (partyCode) {
+        console.log(`[BotManager] Resolving via Mobile API: region=${targetIP}, party=${partyCode || 'none'}, mode=${config.gameMode || 'ffa'}`);
+        const { server, token } = await proto.findMobileServer(targetIP, config.gameMode || 'ffa', partyCode);
+        resolvedUrl = server.startsWith('wss://') ? server : `wss://${server}`;
+        if (partyCode && !resolvedUrl.includes('party_id=')) {
           resolvedUrl += (resolvedUrl.includes('?') ? '&' : '?') + `party_id=${partyCode}`;
         }
-        console.log(`[BotManager] Resolved: ${resolvedUrl}`);
+        console.log(`[BotManager] Mobile API resolved: ${resolvedUrl}`);
       } catch (err) {
-        console.error(`[BotManager] Bouncer failed:`, err.message);
-        return { botsStarted: 0, error: err.message };
+        console.error(`[BotManager] Mobile API failed, trying web bouncer:`, err.message);
+        try {
+          const { server } = await proto.findServer(targetIP, config.gameMode || 'ffa', partyCode);
+          resolvedUrl = `wss://${server}`;
+          if (partyCode) {
+            resolvedUrl += (resolvedUrl.includes('?') ? '&' : '?') + `party_id=${partyCode}`;
+          }
+          console.log(`[BotManager] Web bouncer fallback: ${resolvedUrl}`);
+        } catch (err2) {
+          console.error(`[BotManager] Both APIs failed:`, err2.message);
+          return { botsStarted: 0, error: err2.message };
+        }
       }
     }
 
