@@ -78,16 +78,7 @@ else
 fi
 info "Using injection tool: ${BOLD}${INJECT_TOOL}${RESET}"
 
-# ── Locate signing tool ─────────────────────────────────────────────────────
-SIGN_TOOL=""
-if command -v ldid &>/dev/null; then
-    SIGN_TOOL="ldid"
-elif command -v codesign &>/dev/null; then
-    SIGN_TOOL="codesign"
-else
-    error "Neither ldid nor codesign found in PATH. Install one of them first."
-fi
-info "Using signing tool: ${BOLD}${SIGN_TOOL}${RESET}"
+# Signing is left to the user's tool (KSign, Sideloadly, AltStore, etc.)
 
 # ── Create temp directory ───────────────────────────────────────────────────
 WORK_DIR="$(mktemp -d)"
@@ -166,39 +157,16 @@ elif [[ "$INJECT_TOOL" == "insert_dylib" ]]; then
 fi
 ok "Load command injected"
 
-# ── Ad-hoc sign everything ──────────────────────────────────────────────────
-info "Signing with ad-hoc identity..."
+# ── Strip all code signatures (let the user's signing tool handle it) ────────
+info "Stripping code signatures for clean re-signing..."
 
-if [[ "$SIGN_TOOL" == "ldid" ]]; then
-    # Sign the dylib
-    ldid -S "$FRAMEWORKS_DIR/$DYLIB_NAME"
-    # Sign CydiaSubstrate if present
-    if [[ -d "$FRAMEWORKS_DIR/CydiaSubstrate.framework" ]]; then
-        find "$FRAMEWORKS_DIR/CydiaSubstrate.framework" -type f -perm +111 -exec ldid -S {} \;
-    fi
-    # Sign all other frameworks and dylibs
-    find "$FRAMEWORKS_DIR" -name '*.dylib' -exec ldid -S {} \;
-    find "$FRAMEWORKS_DIR" -name '*.framework' -exec sh -c '
-        for fw do
-            binary="$fw/$(basename "$fw" .framework)"
-            [ -f "$binary" ] && ldid -S "$binary"
-        done
-    ' _ {} +
-    # Sign main binary
-    ldid -S "$MAIN_BINARY"
-elif [[ "$SIGN_TOOL" == "codesign" ]]; then
-    # Sign all dylibs and frameworks
-    find "$FRAMEWORKS_DIR" \( -name '*.dylib' -o -name '*.framework' \) -print0 | while IFS= read -r -d '' item; do
-        if [[ -d "$item" ]]; then
-            codesign --force --deep --sign - "$item"
-        else
-            codesign --force --sign - "$item"
-        fi
-    done
-    # Sign main binary
-    codesign --force --sign - "$MAIN_BINARY"
-fi
-ok "Signing complete"
+# Remove _CodeSignature dirs from all frameworks and the app itself
+find "$APP_DIR" -name '_CodeSignature' -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Remove embedded.mobileprovision if present (KSign/Sideloadly inject their own)
+rm -f "$APP_DIR/embedded.mobileprovision"
+
+ok "Signatures stripped — IPA ready for KSign/Sideloadly/AltStore signing"
 
 # ── Re-package IPA ───────────────────────────────────────────────────────────
 info "Re-packaging IPA..."
