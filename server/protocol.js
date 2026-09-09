@@ -240,7 +240,6 @@ async function fetchClientVersion() {
 // ─── Bouncer (matchmaker) ──────────────────────────────────────────────────
 
 const BOUNCER_HOST = 'webbouncer-live-v8-0.agario.miniclippt.com';
-const MOBILE_API_HOST = 'mc-api.agar.io';
 
 const GAME_MODE_MAP = {
   'classic': ':ffa',
@@ -380,11 +379,10 @@ async function findServer(region, gameMode, partyToken, customHost) {
   });
 }
 
-// findMobileServer: uses the same bouncer but with :party mode for party codes
-// (mc-api.agar.io is no longer available — mobile and web share the same bouncer)
+// findMobileServer kept as alias for backward compat
 async function findMobileServer(region, gameMode, partyCode) {
-  const mode = partyCode ? ':party' : gameMode;
-  return findServer(region, mode, partyCode);
+  if (partyCode) return findServer(region, ':party', partyCode);
+  return findServer(region, gameMode);
 }
 
 module.exports = {
@@ -408,7 +406,6 @@ module.exports = {
   findServer,
   findMobileServer,
   BOUNCER_HOST,
-  MOBILE_API_HOST,
   REGION_MAP,
   GAME_MODE_MAP,
 };

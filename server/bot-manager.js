@@ -52,24 +52,30 @@ class BotManager {
 
     const count = Math.max(1, Math.min(100, botCount));
 
-    // Resolve server URL ONCE via bouncer (instead of each bot calling individually)
+    // Resolve server URL ONCE (instead of each bot calling individually)
     let resolvedUrl = targetIP;
     const isRegion = !targetIP.startsWith('ws') && !targetIP.includes('/') && !targetIP.includes('.');
     if (isRegion) {
-      // When party code is provided, use :party mode so the bouncer routes to the correct server
-      const bouncerMode = partyCode ? ':party' : (config.gameMode || 'ffa');
       try {
-        console.log(`[BotManager] Resolving: region=${targetIP}, mode=${bouncerMode}, party=${partyCode || 'none'}`);
-        const { server, token } = await proto.findServer(targetIP, bouncerMode, partyCode);
-        resolvedUrl = `wss://${server}`;
-        // Add bouncer token (required for party server auth)
-        if (token) {
-          resolvedUrl += (resolvedUrl.includes('?') ? '&' : '?') + `token=${token}`;
-          console.log(`[BotManager] Party token: ${token}`);
+        if (partyCode) {
+          // Party code: use findServer with :party mode + party code in field 1.3
+          // The bouncer returns the specific server hosting that party + a token
+          console.log(`[BotManager] Joining party: code=${partyCode}, region=${targetIP}`);
+          const { server, token } = await proto.findServer(targetIP, ':party', partyCode);
+          resolvedUrl = `wss://${server}`;
+          if (token) {
+            // agar.io client uses ?party_id=TOKEN (not ?token=)
+            resolvedUrl += `?party_id=${encodeURIComponent(token)}`;
+            console.log(`[BotManager] Party token: ${token}`);
+          }
+        } else {
+          console.log(`[BotManager] Finding server: region=${targetIP}, mode=${config.gameMode || 'ffa'}`);
+          const { server } = await proto.findServer(targetIP, config.gameMode || 'ffa');
+          resolvedUrl = `wss://${server}`;
         }
         console.log(`[BotManager] Resolved: ${resolvedUrl}`);
       } catch (err) {
-        console.error(`[BotManager] Bouncer failed:`, err.message);
+        console.error(`[BotManager] Server resolution failed:`, err.message);
         return { botsStarted: 0, error: err.message };
       }
     }
