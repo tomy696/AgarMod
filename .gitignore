@@ -22,6 +22,9 @@ server/package-lock.json
 *.deb
 *.ipa
 
+# Proxy credentials (NEVER commit to public repo)
+server/proxies.txt
+
 # Temp
 *.o
 *.d
