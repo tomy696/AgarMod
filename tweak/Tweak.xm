@@ -1804,8 +1804,6 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
                                     if (window) break;
                                 }
                             }
-                            if (!window)
-                                window = [UIApplication sharedApplication].keyWindow;
                             if (window) {
                                 [[ModMenuRenderer shared] setupWithWindow:window];
                                 NSLog(@"[XRD] ModMenu overlay initialized");
