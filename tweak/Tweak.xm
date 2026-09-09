@@ -8,7 +8,7 @@
 #import <dispatch/dispatch.h>
 #import <MetalKit/MetalKit.h>
 #import "headers/AgarIO.h"
-#import "ModMenuRenderer.h"
+#import "NativeMenu.h"
 
 // ============================================================================
 // GLOBAL STATE
@@ -1785,19 +1785,15 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
 
             NSLog(@"[XRD] Hook groups initialized");
 
-            // Set up the ImGui ModMenu overlay once the app window is ready.
-            // Delay slightly so the game's window and Metal context are fully up.
             [[NSNotificationCenter defaultCenter]
                 addObserverForName:UIApplicationDidBecomeActiveNotification
                 object:nil queue:[NSOperationQueue mainQueue]
                 usingBlock:^(NSNotification *note) {
                     static dispatch_once_t menuOnce;
                     dispatch_once(&menuOnce, ^{
-                        // Give the game a moment to finish window setup
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             @try {
                                 UIWindow *window = nil;
-                                // Try scene-based lookup first (iOS 13+)
                                 for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                                     if ([scene isKindOfClass:[UIWindowScene class]]) {
                                         for (UIWindow *w in ((UIWindowScene *)scene).windows) {
@@ -1806,25 +1802,23 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
                                         if (window) break;
                                     }
                                 }
-                                // Fallback: iterate all app windows (works for non-scene apps)
                                 if (!window) {
                                     for (UIWindow *w in [UIApplication sharedApplication].windows) {
                                         if (w.isKeyWindow) { window = w; break; }
                                     }
                                 }
-                                // Last resort: just use the first window
                                 if (!window) {
                                     NSArray *windows = [UIApplication sharedApplication].windows;
                                     if (windows.count > 0) window = windows[0];
                                 }
                                 if (window) {
-                                    [[ModMenuRenderer shared] setupWithWindow:window];
-                                    NSLog(@"[XRD] ModMenu overlay initialized on window: %@", window);
+                                    [[XRDMenuController shared] setupWithWindow:window];
+                                    NSLog(@"[XRD] Native menu initialized on window: %@", window);
                                 } else {
-                                    NSLog(@"[XRD] No window found for ModMenu");
+                                    NSLog(@"[XRD] No window found for menu");
                                 }
                             } @catch (NSException *e) {
-                                NSLog(@"[XRD] ModMenu setup failed: %@", e);
+                                NSLog(@"[XRD] Menu setup failed: %@", e);
                             }
                         });
                     });

@@ -8,19 +8,12 @@ TWEAK_NAME = XRD
 
 XRD_FILES = \
 	tweak/Tweak.xm \
-	tweak/imgui/imgui.cpp \
-	tweak/imgui/imgui_draw.cpp \
-	tweak/imgui/imgui_tables.cpp \
-	tweak/imgui/imgui_widgets.cpp \
-	tweak/imgui/imgui_impl_metal.mm \
-	tweak/imgui/imgui_impl_ios.mm \
-	tweak/imgui/ModMenuRenderer.mm \
-	tweak/imgui/ModMenu.mm
+	tweak/NativeMenu.mm
 
-XRD_FRAMEWORKS = UIKit Foundation Metal MetalKit QuartzCore
+XRD_FRAMEWORKS = UIKit Foundation MetalKit
 XRD_LIBRARIES = substrate
 
-XRD_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)/tweak/headers -I$(THEOS_PROJECT_DIR)/tweak/imgui
+XRD_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)/tweak/headers -I$(THEOS_PROJECT_DIR)/tweak
 XRD_CCFLAGS = -std=c++17
 XRD_CXXFLAGS = -std=c++17
 
