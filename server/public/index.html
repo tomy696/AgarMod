@@ -617,7 +617,11 @@ async function startBots() {
 
   if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
+    const servers = res.servers_scanning || 1;
+    const msg = 'Started ' + (res.bots_started || count) + ' bots.' +
+      (servers > 1 ? ' Scanning ' + servers + ' servers to find your party.' : '') +
+      ' Proxies: ' + (res.proxies_alive || 0) + ' alive.';
+    log(msg, 'success');
     startPolling();
   } else {
     log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');

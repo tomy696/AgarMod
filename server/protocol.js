@@ -379,9 +379,100 @@ async function findServer(region, gameMode, partyToken, customHost) {
   });
 }
 
-// findMobileServer kept as alias for backward compat
+// v4/getToken — join an existing party by code
+// The real agar.io client sends BOTH field 1 (regionInfoField) AND field 3 (getTokenField)
+function buildGetTokenRequest(region, gameMode, partyCode) {
+  function writeVarint(buf, value) {
+    while (value > 0x7f) { buf.push((value & 0x7f) | 0x80); value >>>= 7; }
+    buf.push(value & 0x7f);
+  }
+  function writeTag(buf, wireType, fieldNum) { writeVarint(buf, (fieldNum << 3) | wireType); }
+  function writeStr(buf, str) {
+    const enc = Buffer.from(str, 'utf8');
+    writeVarint(buf, enc.length);
+    for (const b of enc) buf.push(b);
+  }
+  function writeMsg(buf, fieldNum, fn) {
+    writeTag(buf, 2, fieldNum);
+    const inner = [];
+    fn(inner);
+    writeVarint(buf, inner.length);
+    for (const b of inner) buf.push(b);
+  }
+
+  const buf = [];
+  // Field 1: regionInfoField (region + gameMode)
+  writeMsg(buf, 1, (inner) => {
+    writeTag(inner, 2, 1); writeStr(inner, region);
+    writeTag(inner, 2, 2); writeStr(inner, gameMode);
+  });
+  // Field 3: getTokenField (party code)
+  writeMsg(buf, 3, (inner) => {
+    writeTag(inner, 2, 1); writeStr(inner, partyCode);
+  });
+  return Buffer.from(buf);
+}
+
+async function getPartyServer(region, partyCode) {
+  const https = require('https');
+  const bouncerRegion = REGION_MAP[region] || region;
+  const body = buildGetTokenRequest(bouncerRegion, ':party', partyCode);
+  console.log(`[Bouncer] getToken: region=${bouncerRegion}, party=${partyCode}, bytes=${body.length}`);
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: BOUNCER_HOST,
+      path: '/v4/getToken',
+      method: 'POST',
+      rejectUnauthorized: false,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Accept': 'text/plain, */*; q=0.01',
+        'x-support-proto-version': '15.0.3',
+        'x-client-version': '' + CLIENT_VERSION,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Origin': 'https://agar.io',
+        'Referer': 'https://agar.io/',
+        'Content-Length': body.length,
+      },
+    }, (res) => {
+      let data = [];
+      res.on('data', (c) => data.push(c));
+      res.on('end', () => {
+        const raw = Buffer.concat(data);
+        const text = raw.toString();
+        console.log(`[Bouncer] getToken response: HTTP ${res.statusCode}, ${text.slice(0, 500)}`);
+
+        if (res.statusCode === 404) {
+          reject(new Error(`v4/getToken returned 404 — endpoint may be removed`));
+          return;
+        }
+
+        try {
+          const json = JSON.parse(text);
+          if (json.status === 'ok' && json.endpoints) {
+            const server = json.endpoints.https || json.endpoints.http;
+            if (server && server !== '0.0.0.0:0') {
+              console.log(`[Bouncer] Party server: ${server}`);
+              resolve({ server, token: json.token || null });
+              return;
+            }
+          }
+          reject(new Error(`Party not found (${json.status || 'no server'})`));
+        } catch (e) {
+          reject(new Error(`getToken parse error: ${e.message}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('getToken timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 async function findMobileServer(region, gameMode, partyCode) {
-  if (partyCode) return findServer(region, ':party', partyCode);
+  if (partyCode) return getPartyServer(region, partyCode);
   return findServer(region, gameMode);
 }
 
@@ -404,6 +495,7 @@ module.exports = {
   parseBorders,
   fetchClientVersion,
   findServer,
+  getPartyServer,
   findMobileServer,
   BOUNCER_HOST,
   REGION_MAP,

@@ -256,6 +256,7 @@ app.post('/botter2.php', async (req, res) => {
         bots_running: status.bots_running,
         bots_connected: status.bots_connected,
         bots_started: result.botsStarted,
+        servers_scanning: status.servers_scanning || 1,
         proxies_alive: proxyStats.alive,
         proxies_total: proxyStats.total,
         title: '',
