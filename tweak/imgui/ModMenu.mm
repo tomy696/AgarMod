@@ -181,16 +181,6 @@ static void StatusDot(bool active) {
     ImGui::SameLine();
 }
 
-static void AccentButton(const char* label, ImVec2 size, bool highlight = false) {
-    if (highlight) {
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.30f, 1.00f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered,  ImVec4(0.65f, 0.40f, 1.00f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,   ImVec4(0.75f, 0.50f, 1.00f, 1.0f));
-    }
-    ImGui::Button(label, size);
-    if (highlight) ImGui::PopStyleColor(3);
-}
-
 // ============================================================================
 // Header
 // ============================================================================
