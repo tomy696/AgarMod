@@ -2,15 +2,21 @@
 
 const BotClient = require('./bot-client');
 const { BOT_STATES } = require('./bot-client');
+const ProxyPool = require('./proxy-pool');
 
 // =============================================================================
-// bot-manager.js - Manages multiple bot instances per session
+// bot-manager.js — Manages multiple bot instances per session
+//
+// Deduced from BiteYt binary: the server assigns one proxy per bot,
+// staggers connections (200-500ms apart), tracks per-session state,
+// supports start/stop/pause, and auto-reconnects with proxy rotation.
 // =============================================================================
 
 class BotManager {
   constructor() {
-    // sessionId -> { bots: Map<botId, BotClient>, config: object }
+    // sessionId -> { bots, config, paused, proxiesUsed }
     this.sessions = new Map();
+    this.proxyPool = new ProxyPool();
     this._nextBotId = 1;
   }
 
@@ -39,21 +45,28 @@ class BotManager {
       targetY = 0,
     } = config;
 
-    // Stop existing bots for this session if any
     if (this.sessions.has(sessionId)) {
       this.stopBots(sessionId);
     }
 
     const count = Math.max(1, Math.min(100, botCount));
     const bots = new Map();
-    const session = { bots, config: { ...config, botCount: count } };
+    const proxiesUsed = new Map(); // botId -> proxy
+    const session = { bots, config: { ...config, botCount: count }, paused: false, proxiesUsed };
     this.sessions.set(sessionId, session);
 
-    console.log(`[BotManager] Starting ${count} bots for session ${sessionId} -> ${targetIP}`);
+    // Get proxies for this batch (one per bot, round-robin)
+    const proxyStats = this.proxyPool.getStats();
+    const proxies = proxyStats.total > 0
+      ? this.proxyPool.getBatch(count)
+      : [];
 
-    // Stagger bot connections to avoid rate limiting
+    const hasProxies = proxies.length > 0;
+    console.log(`[BotManager] Starting ${count} bots for session ${sessionId} -> ${targetIP} (${hasProxies ? proxies.length + ' proxies' : 'direct'})`);
+
     for (let i = 0; i < count; i++) {
       const botId = this._nextBotId++;
+      const proxy = hasProxies ? proxies[i % proxies.length] : null;
       const bot = new BotClient({
         id: botId,
         name: count > 1 ? `${botName}_${i + 1}` : botName,
@@ -62,14 +75,19 @@ class BotManager {
 
       bot.setMode(mode);
       bot.updateTarget(targetX, targetY);
+      if (proxy) proxiesUsed.set(botId, proxy);
 
-      // Handle bot events
+      bot.on('connected', () => {
+        if (proxy) this.proxyPool.markSuccess(proxy.url);
+      });
+
       bot.on('disconnected', (info) => {
         this._onBotDisconnected(sessionId, botId, info);
       });
 
       bot.on('error', (err) => {
         console.error(`[BotManager] Bot ${botId} error:`, err.message);
+        if (proxy) this.proxyPool.markFailed(proxy.url);
       });
 
       bot.on('gameJoined', () => {
@@ -82,15 +100,67 @@ class BotManager {
 
       bots.set(botId, bot);
 
-      // Stagger connections: 200ms apart to avoid rate limiting
+      // Stagger 300-500ms apart (BiteYt pattern: avoid thundering herd)
+      const delay = i * (300 + Math.random() * 200);
       setTimeout(() => {
-        if (this.sessions.has(sessionId) && bots.has(botId)) {
-          bot.connect(targetIP);
+        if (this.sessions.has(sessionId) && bots.has(botId) && !session.paused) {
+          bot.connect(targetIP, proxy);
         }
-      }, i * 200);
+      }, delay);
     }
 
     return { botsStarted: count };
+  }
+
+  /**
+   * Pause all bots for a session (disconnect but keep session alive).
+   * Matches BiteYt's state=pause parameter.
+   * @param {string} sessionId
+   * @returns {{ botsPaused: number }}
+   */
+  pauseBots(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { botsPaused: 0 };
+
+    session.paused = true;
+    let paused = 0;
+    for (const [, bot] of session.bots) {
+      if (bot.state !== BOT_STATES.DISCONNECTED) {
+        bot.disconnect();
+        paused++;
+      }
+    }
+    console.log(`[BotManager] Paused ${paused} bots for session ${sessionId}`);
+    return { botsPaused: paused };
+  }
+
+  /**
+   * Resume paused bots (reconnect with their assigned proxies).
+   * @param {string} sessionId
+   * @returns {{ botsResumed: number }}
+   */
+  resumeBots(sessionId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { botsResumed: 0 };
+
+    session.paused = false;
+    let resumed = 0;
+    let i = 0;
+    for (const [botId, bot] of session.bots) {
+      if (bot.state === BOT_STATES.DISCONNECTED) {
+        const proxy = session.proxiesUsed.get(botId) || null;
+        const delay = i * (300 + Math.random() * 200);
+        setTimeout(() => {
+          if (this.sessions.has(sessionId) && session.bots.has(botId) && !session.paused) {
+            bot.connect(session.config.targetIP, proxy);
+          }
+        }, delay);
+        resumed++;
+        i++;
+      }
+    }
+    console.log(`[BotManager] Resuming ${resumed} bots for session ${sessionId}`);
+    return { botsResumed: resumed };
   }
 
   /**
@@ -248,23 +318,31 @@ class BotManager {
    */
   _onBotDisconnected(sessionId, botId, info) {
     const session = this.sessions.get(sessionId);
-    if (!session) return;
+    if (!session || session.paused) return;
 
     const bot = session.bots.get(botId);
     if (!bot) return;
 
-    // Attempt reconnection after a delay (with jitter to avoid thundering herd)
+    // Get a fresh proxy for reconnection (rotate away from failed ones)
+    let proxy = session.proxiesUsed.get(botId) || null;
+    if (this.proxyPool.getStats().alive > 0) {
+      const newProxy = this.proxyPool.getNext();
+      if (newProxy) {
+        proxy = newProxy;
+        session.proxiesUsed.set(botId, proxy);
+      }
+    }
+
     const delay = 3000 + Math.random() * 5000;
     console.log(`[BotManager] Bot ${botId} disconnected, reconnecting in ${Math.round(delay)}ms`);
 
     setTimeout(() => {
-      // Check that the session and bot still exist
       const sess = this.sessions.get(sessionId);
-      if (!sess || !sess.bots.has(botId)) return;
+      if (!sess || !sess.bots.has(botId) || sess.paused) return;
 
       const b = sess.bots.get(botId);
       if (b.state === BOT_STATES.DISCONNECTED) {
-        b.connect(sess.config.targetIP);
+        b.connect(sess.config.targetIP, proxy);
       }
     }, delay);
   }

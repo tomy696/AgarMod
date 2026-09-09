@@ -1,15 +1,17 @@
 {
   "name": "agario-bot-server",
   "version": "1.0.0",
-  "description": "Agar.io bot server for iOS tweak",
+  "description": "Agar.io bot server with SOCKS5/HTTP proxy support (BiteYt-compatible API)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "protobufjs": "^7.2.6",
+    "https-proxy-agent": "^7.0.4",
+    "socks-proxy-agent": "^8.0.2",
     "uuid": "^9.0.0",
     "ws": "^8.16.0"
   }

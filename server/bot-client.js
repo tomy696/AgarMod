@@ -4,6 +4,10 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const proto = require('./protocol');
 
+let SocksProxyAgent, HttpsProxyAgent;
+try { SocksProxyAgent = require('socks-proxy-agent').SocksProxyAgent; } catch (_) {}
+try { HttpsProxyAgent = require('https-proxy-agent').HttpsProxyAgent; } catch (_) {}
+
 // =============================================================================
 // bot-client.js - Headless Agar.io WebSocket bot client
 // =============================================================================
@@ -60,32 +64,48 @@ class BotClient extends EventEmitter {
   // ---------------------------------------------------------------------------
 
   /**
-   * Connect to an Agar.io game server.
+   * Connect to an Agar.io game server, optionally through a proxy.
    * @param {string} serverIP - Server IP:port (e.g., "123.45.67.89:443")
+   * @param {{ url: string, type: string }|null} [proxy] - SOCKS5/HTTP proxy
    */
-  connect(serverIP) {
+  connect(serverIP, proxy) {
     if (this.state !== BOT_STATES.DISCONNECTED) {
       this.disconnect();
     }
 
     this.serverIP = serverIP;
+    this.proxyUrl = proxy ? proxy.url : null;
     this.state = BOT_STATES.CONNECTING;
 
-    // Determine protocol and URL
     const url = serverIP.startsWith('ws://') || serverIP.startsWith('wss://')
       ? serverIP
       : `wss://${serverIP}`;
 
-    console.log(`[Bot ${this.id}] Connecting to ${url}`);
+    const via = proxy ? ` via ${proxy.url.replace(/\/\/.*@/, '//*:*@')}` : ' (direct)';
+    console.log(`[Bot ${this.id}] Connecting to ${url}${via}`);
 
     try {
-      this.ws = new WebSocket(url, {
+      const wsOpts = {
         headers: {
           'Origin': 'https://agar.io',
-          'User-Agent': 'AgarioClient/2.25.4',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
         },
         rejectUnauthorized: false,
-      });
+        handshakeTimeout: 10000,
+      };
+
+      // Route through proxy if provided
+      if (proxy) {
+        const isSocks = proxy.type === 'socks5' || proxy.type === 'socks4' ||
+                        proxy.url.startsWith('socks');
+        if (isSocks && SocksProxyAgent) {
+          wsOpts.agent = new SocksProxyAgent(proxy.url);
+        } else if (HttpsProxyAgent) {
+          wsOpts.agent = new HttpsProxyAgent(proxy.url);
+        }
+      }
+
+      this.ws = new WebSocket(url, wsOpts);
       this.ws.binaryType = 'arraybuffer';
 
       this.ws.on('open', () => this._onOpen());
