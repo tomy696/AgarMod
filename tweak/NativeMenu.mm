@@ -135,8 +135,6 @@ static const CGFloat kBtnSize     = 46.0f;
     CGFloat w = _scrollView.frame.size.width;
     CGFloat y = 0;
     CGFloat pad = 16;
-    CGFloat rowH = 48;
-
     // Safe area top
     if (@available(iOS 11.0, *)) {
         y += _hostWindow.safeAreaInsets.top;
@@ -364,7 +362,6 @@ typedef void(^ToggleBlock)(BOOL on);
     UISwitch *sw = [[UISwitch alloc] initWithFrame:CGRectMake(w - 67, y + 6, 51, 31)];
     sw.on = isOn;
     sw.onTintColor = [UIColor colorWithRed:0.55f green:0.30f blue:1.0f alpha:1.0f];
-    __weak typeof(self) weakSelf = self;
     [sw addAction:[UIAction actionWithHandler:^(UIAction *a) {
         UISwitch *s = (UISwitch *)a.sender;
         if (action) action(s.isOn);
