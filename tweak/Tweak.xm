@@ -1711,28 +1711,59 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
             [ModSettings shared];
 
             %init(Core);
-            NSLog(@"[XRD] DIAGNOSTIC: Core only, all game hooks DISABLED");
 
-            // All game hooks force-disabled for crash diagnosis
-            if (0) {
-                %init(FPSUnlockDisplay);
-                %init(GameplayCapture);
-                %init(ZoomHack);
-                %init(CellMassOverlay);
-                %init(MassDisplay);
-                %init(EnemyMassRenderer);
-                %init(SkinUnlock);
-                %init(AutoContinue);
-                %init(FPSUnlock);
-                %init(FastMode);
-                %init(DarkMode);
-                %init(GridAndBorderHide);
-                %init(FriendTrackerHide);
-                %init(TokenCounterHide);
-                %init(ServerLoader);
-                %init(ConnectionInterceptor);
-                %init(VisualMods);
-            }
+            // Each hook in its own @try so one failure doesn't kill the rest
+            @try { %init(FPSUnlockDisplay); } @catch (NSException *e) { NSLog(@"[XRD] FPSUnlockDisplay failed: %@", e); }
+
+            if (objc_getClass("GameplayWidget"))
+                @try { %init(GameplayCapture); } @catch (NSException *e) { NSLog(@"[XRD] GameplayCapture failed: %@", e); }
+
+            if (objc_getClass("GameplaySettings"))
+                @try { %init(ZoomHack); } @catch (NSException *e) { NSLog(@"[XRD] ZoomHack failed: %@", e); }
+
+            if (objc_getClass("AgarCell"))
+                @try { %init(CellMassOverlay); } @catch (NSException *e) { NSLog(@"[XRD] CellMassOverlay failed: %@", e); }
+
+            if (objc_getClass("ScoreWidget") || objc_getClass("BaseArenaState"))
+                @try { %init(MassDisplay); } @catch (NSException *e) { NSLog(@"[XRD] MassDisplay failed: %@", e); }
+
+            if (objc_getClass("AgarCellView"))
+                @try { %init(EnemyMassRenderer); } @catch (NSException *e) { NSLog(@"[XRD] EnemyMassRenderer failed: %@", e); }
+
+            if (objc_getClass("UserWallet"))
+                @try { %init(SkinUnlock); } @catch (NSException *e) { NSLog(@"[XRD] SkinUnlock failed: %@", e); }
+
+            if (objc_getClass("ContinueGame"))
+                @try { %init(AutoContinue); } @catch (NSException *e) { NSLog(@"[XRD] AutoContinue failed: %@", e); }
+
+            if (objc_getClass("BaseArenaView"))
+                @try { %init(FPSUnlock); } @catch (NSException *e) { NSLog(@"[XRD] FPSUnlock failed: %@", e); }
+
+            if (objc_getClass("AgarCellView") || objc_getClass("SoftBodyCellView"))
+                @try { %init(FastMode); } @catch (NSException *e) { NSLog(@"[XRD] FastMode failed: %@", e); }
+
+            if (objc_getClass("BaseArenaState"))
+                @try { %init(DarkMode); } @catch (NSException *e) { NSLog(@"[XRD] DarkMode failed: %@", e); }
+
+            if (objc_getClass("BaseArenaState"))
+                @try { %init(GridAndBorderHide); } @catch (NSException *e) { NSLog(@"[XRD] GridAndBorderHide failed: %@", e); }
+
+            if (objc_getClass("FriendTrackerWidget"))
+                @try { %init(FriendTrackerHide); } @catch (NSException *e) { NSLog(@"[XRD] FriendTrackerHide failed: %@", e); }
+
+            if (objc_getClass("CollectibleCounterWidget"))
+                @try { %init(TokenCounterHide); } @catch (NSException *e) { NSLog(@"[XRD] TokenCounterHide failed: %@", e); }
+
+            if (objc_getClass("OnlineArenaState"))
+                @try { %init(ServerLoader); } @catch (NSException *e) { NSLog(@"[XRD] ServerLoader failed: %@", e); }
+
+            if (objc_getClass("OnlineArenaState"))
+                @try { %init(ConnectionInterceptor); } @catch (NSException *e) { NSLog(@"[XRD] ConnectionInterceptor failed: %@", e); }
+
+            if (objc_getClass("FriendTrackerWidget") || objc_getClass("LeaderboardWidget"))
+                @try { %init(VisualMods); } @catch (NSException *e) { NSLog(@"[XRD] VisualMods failed: %@", e); }
+
+            NSLog(@"[XRD] All hook groups initialized");
 
             [[NSNotificationCenter defaultCenter]
                 addObserverForName:UIApplicationDidBecomeActiveNotification
