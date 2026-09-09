@@ -1,9 +1,9 @@
-Package: com.agarmod.tweak
-Name: AgarMod
-Version: 1.0.0
+Package: com.xrd.tweak
+Name: XRD
+Version: 2.0.0
 Architecture: iphoneos-arm64
-Description: Agar.io mod with zoom, bots, macros, and more
-Author: AgarMod Team
-Maintainer: AgarMod Team
+Description: Agar.io mod — zoom, bots, macros, skins, FPS unlock, dark mode
+Author: XRD
+Maintainer: XRD
 Section: Tweaks
 Depends: mobilesubstrate

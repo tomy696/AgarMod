@@ -117,8 +117,8 @@ static NSMutableDictionary<NSNumber *, NSNumber *> *g_enemyCellMasses = nil;
                                    error:nil];
         }
 
-        NSString *plistPath = [prefsPath stringByAppendingPathComponent:@"com.agario.mod.plist"];
-        _defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.agario.mod"];
+        NSString *plistPath = [prefsPath stringByAppendingPathComponent:@"com.xrd.mod.plist"];
+        _defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.xrd.mod"];
 
         if (![fm fileExistsAtPath:plistPath]) {
             [self applyDefaults];
@@ -579,8 +579,8 @@ static NSString *formatMass(float mass) {
 
     [[ModSettings shared] loadSettings];
 
-    NSLog(@"[AgarMod] Mod initialized — session: %@", g_sessionId);
-    NSLog(@"[AgarMod] Zoom: %@ | EnemyMass: %@ | Skins: %@ | FPS: %@ | Dark: %@",
+    NSLog(@"[XRD] Mod initialized — session: %@", g_sessionId);
+    NSLog(@"[XRD] Zoom: %@ | EnemyMass: %@ | Skins: %@ | FPS: %@ | Dark: %@",
         g_zoomEnabled ? @"ON" : @"OFF",
         g_showEnemyMass ? @"ON" : @"OFF",
         g_unlockAllSkins ? @"ON" : @"OFF",
@@ -589,7 +589,7 @@ static NSString *formatMass(float mass) {
 
     if (g_botServerURL && g_botServerURL.length > 0) {
         [[BotManager shared] checkVersion:^(BOOL success, NSString *message) {
-            NSLog(@"[AgarMod] Bot server version check: %@ — %@",
+            NSLog(@"[XRD] Bot server version check: %@ — %@",
                 success ? @"OK" : @"FAIL", message);
         }];
     }
@@ -846,7 +846,7 @@ static NSString *formatMass(float mass) {
 
 - (void)showContinuePopupWithMass:(float)mass keep:(float)keep customData:(id)data {
     if (g_modEnabled && g_autoContinue) {
-        NSLog(@"[AgarMod] Auto-continue: mass=%.0f, keep=%.0f", mass, keep);
+        NSLog(@"[XRD] Auto-continue: mass=%.0f, keep=%.0f", mass, keep);
 
         // Skip the popup entirely. Dispatch the respawn on next runloop iteration
         // so the game state machine has time to settle.
@@ -917,7 +917,7 @@ static NSString *formatMass(float mass) {
                 NSString *host = [connection valueForKey:@"host"];
                 if (host) {
                     g_currentGameServerIP = [host copy];
-                    NSLog(@"[AgarMod] Connected to server: %@", g_currentGameServerIP);
+                    NSLog(@"[XRD] Connected to server: %@", g_currentGameServerIP);
                 }
             }
         }
@@ -935,7 +935,7 @@ static NSString *formatMass(float mass) {
 
     if (code && code.length > 0) {
         g_currentPartyCode = [code copy];
-        NSLog(@"[AgarMod] Party code captured: %@", g_currentPartyCode);
+        NSLog(@"[XRD] Party code captured: %@", g_currentPartyCode);
     }
 }
 
@@ -1107,7 +1107,7 @@ static NSString *formatMass(float mass) {
 - (void)setup {
     %orig;
     g_gameplayWidgetRef = self;
-    NSLog(@"[AgarMod] GameplayWidget captured for macros");
+    NSLog(@"[XRD] GameplayWidget captured for macros");
 }
 
 - (void)cleanup {
@@ -1115,7 +1115,7 @@ static NSString *formatMass(float mass) {
         stopFeedMacro();
         stopSplitMacro();
         g_gameplayWidgetRef = nil;
-        NSLog(@"[AgarMod] GameplayWidget released");
+        NSLog(@"[XRD] GameplayWidget released");
     }
     %orig;
 }
@@ -1132,7 +1132,7 @@ static void unlockFPSInViewHierarchy(UIView *view) {
     if (!view) return;
     if ([view isKindOfClass:[MTKView class]]) {
         ((MTKView *)view).preferredFramesPerSecond = 120;
-        NSLog(@"[AgarMod] MTKView FPS set to 120");
+        NSLog(@"[XRD] MTKView FPS set to 120");
         return;
     }
     for (UIView *subview in view.subviews) {
@@ -1290,7 +1290,7 @@ static void unlockFPSInViewHierarchy(UIView *view) {
 
 - (void)sendNetworkMessageEnterGame:(id)params {
     if (g_modEnabled && g_serverLoaderEnabled && g_targetServerIP && g_targetServerIP.length > 0) {
-        NSLog(@"[AgarMod] Server loader: redirecting to %@", g_targetServerIP);
+        NSLog(@"[XRD] Server loader: redirecting to %@", g_targetServerIP);
 
         // Attempt to modify the connection parameters to target our server
         @try {
@@ -1303,7 +1303,7 @@ static void unlockFPSInViewHierarchy(UIView *view) {
                 return;
             }
         } @catch (NSException *e) {
-            NSLog(@"[AgarMod] Server loader: failed to redirect — %@", e.reason);
+            NSLog(@"[XRD] Server loader: failed to redirect — %@", e.reason);
         }
     }
     %orig;
@@ -1579,13 +1579,13 @@ void agmod_setBotMode(int mode) {
 
 void agmod_startBots(void) {
     [[BotManager shared] startBotsWithMode:g_botMode completion:^(BOOL success, NSString *response) {
-        NSLog(@"[AgarMod] Bots start: %@ — %@", success ? @"OK" : @"FAIL", response);
+        NSLog(@"[XRD] Bots start: %@ — %@", success ? @"OK" : @"FAIL", response);
     }];
 }
 
 void agmod_stopBots(void) {
     [[BotManager shared] stopBots:^(BOOL success) {
-        NSLog(@"[AgarMod] Bots stop: %@", success ? @"OK" : @"FAIL");
+        NSLog(@"[XRD] Bots stop: %@", success ? @"OK" : @"FAIL");
     }];
 }
 
@@ -1682,67 +1682,32 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
             return;
         }
 
-        NSLog(@"[AgarMod] Loading tweak for bundle: %@", bundleId);
+        NSLog(@"[XRD] Loading tweak for bundle: %@", bundleId);
 
         // Initialize settings first
         [ModSettings shared];
 
-        // Initialize groups based on current settings
+        // Initialize ALL hook groups unconditionally so features
+        // can be toggled at runtime without requiring an app restart.
         %init(Core);
         %init(GameplayCapture);
         %init(ServerLoader);
         %init(CellMassOverlay);
+        %init(ZoomHack);
+        %init(MassDisplay);
+        %init(EnemyMassRenderer);
+        %init(SkinUnlock);
+        %init(AutoContinue);
+        %init(FPSUnlock);
+        %init(FPSUnlockDisplay);
+        %init(FastMode);
+        %init(DarkMode);
+        %init(GridAndBorderHide);
+        %init(FriendTrackerHide);
+        %init(TokenCounterHide);
+        %init(VisualMods);
+        %init(ConnectionInterceptor);
 
-        if (g_zoomEnabled) {
-            %init(ZoomHack);
-        }
-
-        if (g_showEnemyMass) {
-            %init(MassDisplay);
-            %init(EnemyMassRenderer);
-        }
-
-        if (g_unlockAllSkins) {
-            %init(SkinUnlock);
-        }
-
-        if (g_autoContinue) {
-            %init(AutoContinue);
-        }
-
-        if (g_unlockFPS) {
-            %init(FPSUnlock);
-            %init(FPSUnlockDisplay);
-        }
-
-        if (g_fastMode) {
-            %init(FastMode);
-        }
-
-        if (g_darkMode) {
-            %init(DarkMode);
-        }
-
-        if (g_hideGrid || g_hideBorders) {
-            %init(GridAndBorderHide);
-        }
-
-        if (g_hideFriendTracker) {
-            %init(FriendTrackerHide);
-        }
-
-        if (g_hideTokenCounter) {
-            %init(TokenCounterHide);
-        }
-
-        if (g_hideProfilePics) {
-            %init(VisualMods);
-        }
-
-        if (g_serverLoaderEnabled) {
-            %init(ConnectionInterceptor);
-        }
-
-        NSLog(@"[AgarMod] All hook groups initialized");
+        NSLog(@"[XRD] All hook groups initialized");
     }
 }

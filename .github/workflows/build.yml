@@ -1,4 +1,4 @@
-name: Build AgarMod
+name: Build XRD
 
 on:
   push:
@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-tweak:
-    name: Build iOS Tweak
+  build:
+    name: Build XRD Tweak + IPA
     runs-on: macos-latest
 
     steps:
@@ -18,14 +18,11 @@ jobs:
 
       - name: Setup Theos
         run: |
-          # Install Theos dependencies
           brew install ldid dpkg
 
-          # Clone Theos
           export THEOS=$HOME/theos
           git clone --recursive https://github.com/theos/theos.git $THEOS
 
-          # Download iOS SDK (14.5)
           curl -L -o /tmp/iPhoneOS14.5.sdk.tar.xz \
             "https://github.com/theos/sdks/releases/download/master-146e41f/iPhoneOS14.5.sdk.tar.xz"
           mkdir -p $THEOS/sdks
@@ -44,57 +41,68 @@ jobs:
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:
-          name: AgarMod-dylib
-          path: .theos/obj/AgarMod.dylib
+          name: XRD-dylib
+          path: .theos/obj/XRD.dylib
           if-no-files-found: warn
 
       - name: Upload deb
         uses: actions/upload-artifact@v4
         with:
-          name: AgarMod-deb
+          name: XRD-deb
           path: packages/*.deb
           if-no-files-found: warn
 
-  build-ipa:
-    name: Build Modded IPA
-    runs-on: macos-latest
-    needs: build-tweak
-    if: github.event_name == 'workflow_dispatch'
+      # ── IPA Build ───────────────────────────────────────────────────────
+      # Downloads the base Agar.io IPA from the latest GitHub Release,
+      # injects XRD.dylib, signs, and uploads the modded IPA.
+      #
+      # To set up: create a GitHub Release and upload your decrypted
+      # Agar.io IPA as "agar.io.ipa" (or any .ipa filename).
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download dylib
-        uses: actions/download-artifact@v4
-        with:
-          name: AgarMod-dylib
-          path: ./build
-
-      - name: Setup tools
+      - name: Download base IPA from release
+        id: get_ipa
         run: |
-          brew install ldid
-          # Install optool
+          # Try to download the IPA from the latest release
+          IPA_URL=$(gh release view --json assets -q '.assets[] | select(.name | endswith(".ipa")) | .url' 2>/dev/null || true)
+
+          if [ -n "$IPA_URL" ]; then
+            echo "Downloading base IPA from release..."
+            gh release download --pattern "*.ipa" -D /tmp/base-ipa/
+            BASE_IPA=$(ls /tmp/base-ipa/*.ipa | head -1)
+            echo "ipa_path=$BASE_IPA" >> $GITHUB_OUTPUT
+            echo "has_ipa=true" >> $GITHUB_OUTPUT
+          else
+            echo "No IPA found in releases. Upload a decrypted Agar.io IPA to a GitHub Release."
+            echo "has_ipa=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Setup injection tools
+        if: steps.get_ipa.outputs.has_ipa == 'true'
+        run: |
+          # Build optool from source
           git clone https://github.com/alexzielenski/optool.git /tmp/optool
           cd /tmp/optool
-          xcodebuild -project optool.xcodeproj -scheme optool -configuration Release SYMROOT=/tmp/optool-build
+          xcodebuild -project optool.xcodeproj -scheme optool \
+            -configuration Release SYMROOT=/tmp/optool-build \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
           sudo cp /tmp/optool-build/Release/optool /usr/local/bin/
 
-      - name: Inject into IPA
+      - name: Inject dylib into IPA
+        if: steps.get_ipa.outputs.has_ipa == 'true'
         run: |
-          # User must upload the original IPA as a secret/artifact
-          if [ -f "${{ github.workspace }}/original.ipa" ]; then
-            chmod +x tools/inject.sh
-            ./tools/inject.sh "${{ github.workspace }}/original.ipa" ./build/AgarMod.dylib ./AgarMod-modded.ipa
-          else
-            echo "No original.ipa found. Upload it to the repo root or as an artifact to build the modded IPA."
-            echo "For now, only the dylib is available."
-          fi
+          chmod +x tools/inject.sh
+          export THEOS=$HOME/theos
+          ./tools/inject.sh \
+            "${{ steps.get_ipa.outputs.ipa_path }}" \
+            .theos/obj/XRD.dylib \
+            ./XRD-modded.ipa
 
       - name: Upload modded IPA
-        if: success()
+        if: steps.get_ipa.outputs.has_ipa == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: AgarMod-IPA
-          path: ./*-modded.ipa
-          if-no-files-found: ignore
+          name: XRD-IPA
+          path: ./XRD-modded.ipa
+          if-no-files-found: warn

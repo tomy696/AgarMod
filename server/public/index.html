@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>AgarMod - Bot Control Panel</title>
+<title>XRD - Bot Control Panel</title>
 <style>
   :root {
     --bg: #0a0a0f;
@@ -324,7 +324,7 @@
 <div class="app">
 
   <div class="header">
-    <h1>AgarMod</h1>
+    <h1>XRD</h1>
     <div class="version">Bot Control Panel v1.0 &mdash; <span class="connection-dot ok" id="connDot"></span><span id="connLabel">Connected</span></div>
   </div>
 
@@ -354,7 +354,7 @@
     <div class="input-row">
       <div class="input-group">
         <label>Bot Name</label>
-        <input type="text" id="botName" value="AgarMod" maxlength="15">
+        <input type="text" id="botName" value="XRD" maxlength="15">
       </div>
       <div class="input-group">
         <label>Mode</label>
@@ -409,8 +409,8 @@
 
 <script>
 const API = window.location.origin;
-let sessionId = localStorage.getItem('agm_session') || crypto.randomUUID();
-localStorage.setItem('agm_session', sessionId);
+let sessionId = localStorage.getItem('xrd_session') || crypto.randomUUID();
+localStorage.setItem('xrd_session', sessionId);
 let currentState = 'idle';
 let pollTimer = null;
 
@@ -436,11 +436,11 @@ const $btnPause = document.getElementById('btnPause');
 const $btnResume = document.getElementById('btnResume');
 
 // Restore saved IP
-const savedIP = localStorage.getItem('agm_ip');
+const savedIP = localStorage.getItem('xrd_ip');
 if (savedIP) $ip.value = savedIP;
 
 $count.oninput = () => { $countLabel.textContent = $count.value; };
-$ip.onchange = () => { localStorage.setItem('agm_ip', $ip.value); };
+$ip.onchange = () => { localStorage.setItem('xrd_ip', $ip.value); };
 
 function log(msg, type = '') {
   const ts = new Date().toLocaleTimeString();

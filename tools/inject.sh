@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# inject.sh — Inject AgarMod.dylib into an Agar.io IPA
+# inject.sh — Inject XRD.dylib into an Agar.io IPA
 #
 # Usage:
-#   ./inject.sh <original.ipa> <AgarMod.dylib> [output.ipa]
+#   ./inject.sh <original.ipa> <XRD.dylib> [output.ipa]
 #
 # Requirements:
 #   - optool or insert_dylib (for adding load commands)
@@ -29,11 +29,11 @@ error() { echo -e "${RED}[-]${RESET} $*"; exit 1; }
 # ── Usage ────────────────────────────────────────────────────────────────────
 usage() {
     echo -e "${BOLD}Usage:${RESET}"
-    echo "  $0 <original.ipa> <AgarMod.dylib> [output.ipa]"
+    echo "  $0 <original.ipa> <XRD.dylib> [output.ipa]"
     echo ""
     echo "Arguments:"
     echo "  original.ipa    Path to the original Agar.io IPA file"
-    echo "  AgarMod.dylib   Path to the compiled tweak dylib"
+    echo "  XRD.dylib   Path to the compiled tweak dylib"
     echo "  output.ipa      (Optional) Output IPA path. Defaults to <original>-modded.ipa"
     echo ""
     echo "Requirements:"
@@ -156,7 +156,7 @@ else
 fi
 
 # ── Inject load command ──────────────────────────────────────────────────────
-LOAD_PATH="@rpath/AgarMod.dylib"
+LOAD_PATH="@rpath/XRD.dylib"
 info "Injecting load command: ${BOLD}${LOAD_PATH}${RESET}"
 
 if [[ "$INJECT_TOOL" == "optool" ]]; then
