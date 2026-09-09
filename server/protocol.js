@@ -241,7 +241,15 @@ async function fetchClientVersion() {
 
 const BOUNCER_HOST = 'webbouncer-live-v8-0.agario.miniclippt.com';
 
-function buildBouncerRequest(region, gameMode) {
+const GAME_MODE_MAP = {
+  'classic': ':ffa',
+  'ffa': ':ffa',
+  'teams': ':teams',
+  'battleroyale': ':battleroyale',
+  'experimental': ':experimental',
+};
+
+function buildBouncerRequest(region, gameMode, partyToken) {
   function writeVarint(buf, value) {
     while (value > 0x7f) { buf.push((value & 0x7f) | 0x80); value >>>= 7; }
     buf.push(value & 0x7f);
@@ -264,6 +272,9 @@ function buildBouncerRequest(region, gameMode) {
   writeMsg(buf, 1, (inner) => {
     writeTag(inner, 2, 1); writeStr(inner, region);
     writeTag(inner, 2, 2); writeStr(inner, gameMode);
+    if (partyToken) {
+      writeTag(inner, 2, 3); writeStr(inner, partyToken);
+    }
   });
   return Buffer.from(buf);
 }
@@ -281,10 +292,12 @@ const REGION_MAP = {
   'me-south-1': 'TK-Turkey',
 };
 
-async function findServer(region, gameMode) {
+async function findServer(region, gameMode, partyToken) {
   const https = require('https');
   const bouncerRegion = REGION_MAP[region] || region;
-  const body = buildBouncerRequest(bouncerRegion, gameMode || ':ffa');
+  const resolvedMode = GAME_MODE_MAP[gameMode] || gameMode || ':ffa';
+  const body = buildBouncerRequest(bouncerRegion, resolvedMode, partyToken);
+  console.log(`[Bouncer] Request: region=${bouncerRegion}, mode=${resolvedMode}, party=${partyToken || 'none'}`);
 
   return new Promise((resolve, reject) => {
     const req = https.request({
@@ -386,4 +399,5 @@ module.exports = {
   findServer,
   BOUNCER_HOST,
   REGION_MAP,
+  GAME_MODE_MAP,
 };

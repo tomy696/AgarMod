@@ -25,6 +25,8 @@ class BotClient extends EventEmitter {
     this.name = config.name || `Bot_${config.id}`;
     this.partyCode = config.partyCode || null;
 
+    this.gameMode = config.gameMode || 'ffa';
+
     this.ws = null;
     this.state = BOT_STATES.DISCONNECTED;
     this.serverIP = null;
@@ -69,7 +71,7 @@ class BotClient extends EventEmitter {
     } else {
       try {
         const region = serverIP;
-        const { server } = await proto.findServer(region, ':ffa');
+        const { server } = await proto.findServer(region, this.gameMode, this.partyCode);
         url = `wss://${server}`;
       } catch (err) {
         console.error(`[Bot ${this.id}] Bouncer error:`, err.message);

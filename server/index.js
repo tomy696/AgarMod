@@ -233,12 +233,13 @@ app.post('/botter2.php', (req, res) => {
         });
       }
 
-      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, party: ${code || 'none'})`);
+      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'})`);
 
       const result = botManager.startBots({
         sessionId,
         targetIP: resolvedIP,
         mode,
+        gameMode: gameMode || 'ffa',
         botName,
         botCount,
         partyCode: code,

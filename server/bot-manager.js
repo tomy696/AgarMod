@@ -71,6 +71,7 @@ class BotManager {
         id: botId,
         name: count > 1 ? `${botName}_${i + 1}` : botName,
         partyCode,
+        gameMode: config.gameMode || 'ffa',
       });
 
       bot.setMode(mode);
