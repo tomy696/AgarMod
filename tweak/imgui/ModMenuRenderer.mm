@@ -129,7 +129,7 @@
     ModMenu::ApplyCustomStyle();
 
     // Load saved settings
-    ModMenu::LoadSettings();
+    agmod_reloadSettings();
 
     _imguiInitialized = YES;
     NSLog(@"[ModMenu] ImGui overlay initialized successfully");
@@ -173,7 +173,7 @@
     if (!_imguiInitialized)
         return;
 
-    ModMenu::SaveSettings();
+    agmod_saveAllSettings();
 
     ImGui_ImplMetal_Shutdown();
     ImGui_ImplIOS_Shutdown();
