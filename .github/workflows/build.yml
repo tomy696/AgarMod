@@ -88,11 +88,94 @@ jobs:
           insert_dylib --help 2>&1 || true
           echo "insert_dylib installed successfully"
 
+      - name: Download real CydiaSubstrate binary
+        id: get_substrate
+        if: steps.get_ipa.outputs.has_ipa == 'true'
+        run: |
+          # Theos only ships a .tbd stub — we need the actual Mach-O for sideloaded IPAs.
+          # The framework binary is in the mobilesubstrate deb, NOT substrate.safemode.
+          # Try multiple mirrors since apt repos go down.
+
+          FOUND=false
+
+          # Source 1: Bingner repo (checkra1n/unc0ver mirror)
+          for url in \
+            "https://apt.bingner.com/debs/1443.00/mobilesubstrate_0.9.7113_iphoneos-arm.deb" \
+            "https://apt.bingner.com/debs/1443.00/mobilesubstrate_0.9.7112_iphoneos-arm.deb" \
+            "https://apt.bingner.com/debs/1443.00/mobilesubstrate_0.9.7111_iphoneos-arm.deb"; do
+            echo "Trying: $url"
+            if curl -fsSL -o /tmp/substrate.deb "$url" 2>/dev/null; then
+              echo "Downloaded from: $url"
+              FOUND=true
+              break
+            fi
+          done
+
+          # Source 2: Elucubratus repo
+          if [ "$FOUND" = false ]; then
+            for url in \
+              "https://apt.elucubratus.com/debs/mobilesubstrate_0.9.7113_iphoneos-arm.deb" \
+              "https://repo.theodyssey.dev/debs/mobilesubstrate_0.9.7113_iphoneos-arm.deb"; do
+              echo "Trying: $url"
+              if curl -fsSL -o /tmp/substrate.deb "$url" 2>/dev/null; then
+                echo "Downloaded from: $url"
+                FOUND=true
+                break
+              fi
+            done
+          fi
+
+          # Source 3: Check if our repo has it as a release asset
+          if [ "$FOUND" = false ]; then
+            echo "Trying GitHub release asset..."
+            gh release download --pattern "CydiaSubstrate" -D /tmp/ 2>/dev/null && FOUND=true || true
+          fi
+
+          if [ "$FOUND" = true ] && [ -f /tmp/substrate.deb ]; then
+            mkdir -p /tmp/substrate-extract
+            cd /tmp/substrate-extract
+            ar x /tmp/substrate.deb
+            # Handle different compression formats
+            for f in data.tar*; do
+              case "$f" in
+                *.xz)   xz -d "$f" && tar xf data.tar ;;
+                *.zst)  zstd -d "$f" && tar xf data.tar ;;
+                *.gz)   tar xzf "$f" ;;
+                *.bz2)  tar xjf "$f" ;;
+                *.lzma) lzma -d "$f" && tar xf data.tar ;;
+                *)      tar xf "$f" 2>/dev/null ;;
+              esac
+            done
+
+            # The binary is at /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate
+            SUBSTRATE_BIN=$(find /tmp/substrate-extract -name "CydiaSubstrate" -not -name "*.h" -not -name "*.plist" -type f 2>/dev/null | head -1)
+            if [ -z "$SUBSTRATE_BIN" ]; then
+              SUBSTRATE_BIN=$(find /tmp/substrate-extract -name "libsubstrate.dylib" -type f 2>/dev/null | head -1)
+            fi
+
+            if [ -n "$SUBSTRATE_BIN" ] && file "$SUBSTRATE_BIN" | grep -q "Mach-O"; then
+              echo "Found real CydiaSubstrate Mach-O: $SUBSTRATE_BIN"
+              echo "substrate_bin=$SUBSTRATE_BIN" >> $GITHUB_OUTPUT
+            else
+              echo "::warning::Extracted files but no Mach-O CydiaSubstrate binary found"
+              find /tmp/substrate-extract -type f | head -20
+            fi
+          elif [ -f /tmp/CydiaSubstrate ]; then
+            # From GitHub release asset
+            echo "substrate_bin=/tmp/CydiaSubstrate" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::Could not download CydiaSubstrate binary from any source"
+            echo "::warning::Upload CydiaSubstrate as a GitHub release asset to fix this"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Inject dylib into IPA
         if: steps.get_ipa.outputs.has_ipa == 'true'
         run: |
           chmod +x tools/inject.sh
           export THEOS=$HOME/theos
+          export SUBSTRATE_BIN="${{ steps.get_substrate.outputs.substrate_bin || '' }}"
           ./tools/inject.sh \
             "${{ steps.get_ipa.outputs.ipa_path }}" \
             .theos/obj/XRD.dylib \

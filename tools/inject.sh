@@ -127,23 +127,51 @@ DYLIB_NAME="$(basename "$DYLIB_PATH")"
 info "Copying ${BOLD}${DYLIB_NAME}${RESET} into Frameworks/"
 cp "$DYLIB_PATH" "$FRAMEWORKS_DIR/$DYLIB_NAME"
 
-# ── Copy CydiaSubstrate.framework if not already present ─────────────────────
-SUBSTRATE_SRC=""
-if [[ -d "${THEOS:-}/vendor/lib/CydiaSubstrate.framework" ]]; then
-    SUBSTRATE_SRC="${THEOS}/vendor/lib/CydiaSubstrate.framework"
-elif [[ -d "/Library/Frameworks/CydiaSubstrate.framework" ]]; then
-    SUBSTRATE_SRC="/Library/Frameworks/CydiaSubstrate.framework"
+# ── Bundle CydiaSubstrate.framework with real binary ─────────────────────────
+# Theos ships only a .tbd stub — sideloaded IPAs need the actual Mach-O binary.
+# The CI workflow downloads it from the substrate deb and passes it via SUBSTRATE_BIN env.
+
+if [[ ! -d "$FRAMEWORKS_DIR/CydiaSubstrate.framework" ]]; then
+    mkdir -p "$FRAMEWORKS_DIR/CydiaSubstrate.framework"
 fi
 
-if [[ -n "$SUBSTRATE_SRC" ]]; then
-    if [[ ! -d "$FRAMEWORKS_DIR/CydiaSubstrate.framework" ]]; then
-        info "Copying CydiaSubstrate.framework into Frameworks/"
-        cp -R "$SUBSTRATE_SRC" "$FRAMEWORKS_DIR/"
-    else
-        ok "CydiaSubstrate.framework already present"
+# Check if the framework already has a real binary (not just a .tbd)
+HAS_REAL_BINARY=false
+if [[ -f "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" ]]; then
+    if file "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate" | grep -q "Mach-O"; then
+        HAS_REAL_BINARY=true
+        ok "CydiaSubstrate.framework already has real binary"
     fi
-else
-    warn "CydiaSubstrate.framework not found on this system. Make sure it is bundled manually."
+fi
+
+if [[ "$HAS_REAL_BINARY" == "false" ]]; then
+    # Try env var first (set by CI), then known paths
+    SUBSTRATE_BIN="${SUBSTRATE_BIN:-}"
+    if [[ -z "$SUBSTRATE_BIN" || ! -f "$SUBSTRATE_BIN" ]]; then
+        # Try Theos vendor (might have real binary on some setups)
+        for candidate in \
+            "${THEOS:-}/vendor/lib/CydiaSubstrate.framework/CydiaSubstrate" \
+            "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate" \
+            "${THEOS:-}/vendor/lib/libsubstrate.dylib"; do
+            if [[ -f "$candidate" ]] && file "$candidate" | grep -q "Mach-O"; then
+                SUBSTRATE_BIN="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [[ -n "$SUBSTRATE_BIN" && -f "$SUBSTRATE_BIN" ]]; then
+        info "Copying real CydiaSubstrate binary from: $SUBSTRATE_BIN"
+        cp "$SUBSTRATE_BIN" "$FRAMEWORKS_DIR/CydiaSubstrate.framework/CydiaSubstrate"
+        ok "CydiaSubstrate binary bundled"
+    else
+        # Copy the Theos stub framework structure (headers, Info.plist) but warn about missing binary
+        if [[ -d "${THEOS:-}/vendor/lib/CydiaSubstrate.framework" ]]; then
+            cp -R "${THEOS}/vendor/lib/CydiaSubstrate.framework/"* "$FRAMEWORKS_DIR/CydiaSubstrate.framework/"
+        fi
+        warn "No real CydiaSubstrate binary found! The IPA will crash on launch."
+        warn "Set SUBSTRATE_BIN env var to the path of the real CydiaSubstrate Mach-O binary."
+    fi
 fi
 
 # ── Inject load command ──────────────────────────────────────────────────────
