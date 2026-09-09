@@ -82,8 +82,6 @@ void ModMenu::ApplyCustomStyle() {
     ImVec4 accent   = ImVec4(0.55f, 0.30f, 1.00f, 1.00f);  // violet
     ImVec4 accentLt = ImVec4(0.70f, 0.45f, 1.00f, 1.00f);
     ImVec4 accentDk = ImVec4(0.40f, 0.20f, 0.75f, 1.00f);
-    ImVec4 green    = ImVec4(0.20f, 0.90f, 0.40f, 1.00f);
-    ImVec4 red      = ImVec4(1.00f, 0.30f, 0.30f, 1.00f);
     ImVec4 text     = ImVec4(0.95f, 0.93f, 1.00f, 1.00f);
     ImVec4 textDim  = ImVec4(0.55f, 0.50f, 0.65f, 1.00f);
     ImVec4 frame    = ImVec4(0.10f, 0.08f, 0.18f, 1.00f);
