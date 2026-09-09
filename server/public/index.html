@@ -16,11 +16,9 @@
     --accent: #6c5ce7;
     --accent2: #a29bfe;
     --green: #00e676;
-    --green-bg: #0d2818;
     --red: #ff5252;
     --orange: #ffab40;
     --blue: #448aff;
-    --blue2: #2979ff;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -30,7 +28,6 @@
     min-height: 100vh;
   }
 
-  /* Top Nav */
   .topnav {
     display: flex;
     align-items: center;
@@ -39,24 +36,10 @@
     border-bottom: 1px solid var(--border);
     background: var(--bg2);
   }
-  .topnav-left h1 {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .topnav-left p {
-    font-size: 12px;
-    color: var(--text2);
-    margin-top: 2px;
-  }
-  .topnav-right {
-    display: flex;
-    gap: 8px;
-  }
+  .topnav h1 { font-size: 18px; font-weight: 700; }
+  .topnav p { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .topnav-right { display: flex; gap: 8px; }
   .nav-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     padding: 8px 14px;
     background: var(--bg3);
     border: 1px solid var(--border);
@@ -69,9 +52,7 @@
     text-decoration: none;
   }
   .nav-btn:hover { background: var(--bg4); color: var(--text); }
-  .nav-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
-  /* Main Layout */
   .main {
     max-width: 1100px;
     margin: 24px auto;
@@ -80,53 +61,22 @@
     grid-template-columns: 1fr 1fr;
     gap: 20px;
   }
-  @media (max-width: 768px) {
-    .main { grid-template-columns: 1fr; }
-  }
+  @media (max-width: 768px) { .main { grid-template-columns: 1fr; } }
 
-  /* Cards */
   .card {
     background: var(--bg2);
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px;
   }
-  .card-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .card-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-  }
-  .card-icon.key { background: linear-gradient(135deg, #6c5ce7, #a29bfe); }
-  .card-icon.settings { background: linear-gradient(135deg, #2979ff, #448aff); }
-  .card-header-text h2 {
-    font-size: 16px;
-    font-weight: 600;
-  }
-  .card-header-text p {
-    font-size: 12px;
-    color: var(--text2);
-    margin-top: 2px;
-  }
+  .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .full-width { grid-column: 1 / -1; }
 
-  /* Form elements */
-  .field {
-    margin-bottom: 16px;
-  }
+  .field { margin-bottom: 16px; }
   .field label {
     display: block;
     font-size: 13px;
     font-weight: 600;
-    color: var(--text);
     margin-bottom: 6px;
   }
   .field input, .field select {
@@ -140,9 +90,7 @@
     outline: none;
     transition: border-color 0.2s;
   }
-  .field input:focus, .field select:focus {
-    border-color: var(--accent);
-  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
   .field select {
     cursor: pointer;
     -webkit-appearance: none;
@@ -152,12 +100,9 @@
     background-position: right 14px center;
     padding-right: 36px;
   }
-  .input-with-btn {
-    display: flex;
-    gap: 8px;
-  }
-  .input-with-btn input { flex: 1; }
-  .input-with-btn button {
+  .input-row { display: flex; gap: 8px; }
+  .input-row input { flex: 1; }
+  .input-row button {
     padding: 0 20px;
     background: var(--accent);
     border: none;
@@ -168,92 +113,8 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .input-with-btn button:hover { background: var(--accent2); }
+  .input-row button:hover { background: var(--accent2); }
 
-  .party-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .party-row input { flex: 1; }
-  .party-tag {
-    padding: 8px 14px;
-    background: var(--bg4);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--text2);
-    font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
-    cursor: pointer;
-  }
-
-  /* Checkbox */
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .checkbox-row input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--accent);
-    cursor: pointer;
-  }
-  .checkbox-row label {
-    font-size: 13px;
-    color: var(--text);
-    cursor: pointer;
-  }
-  .hint {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--green);
-    margin-bottom: 16px;
-  }
-  .hint-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-  }
-
-  /* CTA Buttons */
-  .cta-row {
-    display: flex;
-    gap: 10px;
-    margin-top: 20px;
-  }
-  .cta-btn {
-    flex: 1;
-    padding: 12px;
-    border: none;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.15s;
-  }
-  .cta-btn:active { transform: scale(0.97); }
-  .cta-green {
-    background: linear-gradient(135deg, #00c853, #00e676);
-    color: #000;
-  }
-  .cta-blue {
-    background: linear-gradient(135deg, #2979ff, #448aff);
-    color: #fff;
-  }
-
-  /* Control section (full width) */
-  .full-width {
-    grid-column: 1 / -1;
-  }
-
-  /* Status bar */
   .status-bar {
     display: flex;
     gap: 12px;
@@ -283,11 +144,7 @@
   .val-green { color: var(--green); }
   .val-orange { color: var(--orange); }
 
-  /* Control buttons */
-  .ctrl-row {
-    display: flex;
-    gap: 10px;
-  }
+  .ctrl-row { display: flex; gap: 10px; }
   .ctrl-btn {
     flex: 1;
     padding: 14px;
@@ -307,7 +164,6 @@
   .btn-pause { background: linear-gradient(135deg, #ff6d00, #ffab40); color: #000; }
   .btn-resume { background: linear-gradient(135deg, #2979ff, #448aff); color: #fff; }
 
-  /* State badge */
   .state-badge {
     display: inline-block;
     padding: 4px 12px;
@@ -321,7 +177,6 @@
   .state-badge.running { background: rgba(0,230,118,0.15); color: var(--green); }
   .state-badge.paused { background: rgba(255,171,64,0.15); color: var(--orange); }
 
-  /* Proxy bar */
   .proxy-bar {
     display: flex;
     align-items: center;
@@ -342,13 +197,12 @@
   .proxy-dot.dead { background: var(--red); box-shadow: 0 0 6px var(--red); }
   .proxy-dot.none { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
 
-  /* Log */
   .log-box {
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
-    max-height: 140px;
+    max-height: 220px;
     overflow-y: auto;
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 11px;
@@ -363,13 +217,11 @@
   .log-entry.info { color: var(--blue); }
   .log-entry.warn { color: var(--orange); }
 
-  /* Slider */
   .slider-field label {
     display: flex;
     justify-content: space-between;
     font-size: 13px;
     font-weight: 600;
-    color: var(--text);
     margin-bottom: 8px;
   }
   .slider-field label span { color: var(--accent2); }
@@ -392,7 +244,6 @@
     border: 2px solid var(--accent2);
   }
 
-  /* Connection dot */
   .conn-dot {
     display: inline-block;
     width: 6px;
@@ -402,100 +253,92 @@
   }
   .conn-dot.ok { background: var(--green); }
   .conn-dot.err { background: var(--red); }
+
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text2);
+    transition: all 0.15s;
+  }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  .test-btn {
+    padding: 10px 20px;
+    background: var(--bg3);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    color: var(--accent2);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .test-btn:hover { background: var(--accent); color: #fff; }
+  .test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
 <body>
 
-<!-- Top Nav -->
 <div class="topnav">
-  <div class="topnav-left">
-    <h1>Bot Control</h1>
-    <p>Set up and start your bots.</p>
+  <div>
+    <h1>XRD Bot Control</h1>
+    <p>Agar.io bot management dashboard</p>
   </div>
   <div class="topnav-right">
-    <a class="nav-btn" onclick="pollStatus()">
-      <svg viewBox="0 0 16 16"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11zM8 4a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 018 4zm0 7a.75.75 0 100-1.5.75.75 0 000 1.5z"/></svg>
-      Help
-    </a>
-    <a class="nav-btn" onclick="clearUID()">
-      <svg viewBox="0 0 16 16"><path d="M2.5 1a.75.75 0 000 1.5h11a.75.75 0 000-1.5h-11zM3 4.75a.75.75 0 011.5 0v7.5a.75.75 0 01-1.5 0v-7.5zm4 0a.75.75 0 011.5 0v7.5a.75.75 0 01-1.5 0v-7.5zm4 0a.75.75 0 011.5 0v7.5a.75.75 0 01-1.5 0v-7.5z"/></svg>
-      Clear UIDs
-    </a>
+    <a class="nav-btn" onclick="testBouncer()">Test Bouncer</a>
+    <a class="nav-btn" onclick="clearUID()">New Session</a>
   </div>
 </div>
 
-<!-- Main Grid -->
 <div class="main">
 
-  <!-- LEFT: Skin Key -->
+  <!-- LEFT: Bot Settings -->
   <div class="card">
-    <div class="card-header">
-      <div class="card-icon key">&#128273;</div>
-      <div class="card-header-text">
-        <h2>Skin Key</h2>
-        <p>Verify your bot key</p>
-      </div>
-    </div>
+    <h2>Bot Settings</h2>
 
     <div class="field">
-      <label>UID / Bot Key</label>
-      <div class="input-with-btn">
-        <input type="text" id="secretKey" placeholder="UID or skin_key" autocomplete="off">
+      <label>Secret Key</label>
+      <div class="input-row">
+        <input type="password" id="secretKey" placeholder="Any key (self-hosted)" autocomplete="off">
         <button onclick="verifyKey()">Verify</button>
-      </div>
-    </div>
-
-    <div class="checkbox-row">
-      <input type="checkbox" id="hideKey" checked>
-      <label for="hideKey">Hide Secret Key</label>
-    </div>
-    <div class="hint">
-      <div class="hint-dot"></div>
-      Hidden keys stay masked in screenshots.
-    </div>
-
-    <div class="cta-row">
-      <button class="cta-btn cta-green" onclick="log('Key verified! Full access enabled.', 'success')">Buy Minutes</button>
-      <button class="cta-btn cta-blue" onclick="log('Unlimited access active.', 'info')">Unlimited Access</button>
-    </div>
-  </div>
-
-  <!-- RIGHT: Bot Settings -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-icon settings">&#9881;</div>
-      <div class="card-header-text">
-        <h2>Bot Settings</h2>
-        <p>Server, mode and party</p>
       </div>
     </div>
 
     <div class="field">
       <label>Region</label>
       <select id="region">
-        <option value="">Custom IP</option>
-        <option value="eu-west-2">EU West 2</option>
+        <option value="eu-west-2" selected>EU West (London)</option>
         <option value="eu-west-3">EU West 3</option>
-        <option value="eu-central-1">EU Central 1</option>
-        <option value="us-east-1">US East 1</option>
+        <option value="eu-central-1">EU Central</option>
+        <option value="us-east-1">US East (Atlanta)</option>
         <option value="us-east-2">US East 2</option>
-        <option value="us-west-1">US West 1</option>
-        <option value="sa-east-1">SA East 1</option>
-        <option value="ap-northeast-1">AP Northeast 1</option>
-        <option value="ap-southeast-1">AP Southeast 1</option>
-        <option value="me-south-1">ME South 1</option>
+        <option value="us-west-1">US West</option>
+        <option value="sa-east-1">SA (Brazil)</option>
+        <option value="ap-northeast-1">AP (Tokyo)</option>
+        <option value="ap-southeast-1">AP (Singapore)</option>
+        <option value="me-south-1">ME (Turkey)</option>
+        <option value="">Custom IP</option>
       </select>
     </div>
 
-    <div class="field">
-      <label>Game Mode</label>
-      <select id="gameMode">
-        <option value="classic">Classic</option>
-        <option value="ffa">FFA</option>
-        <option value="teams">Teams</option>
-        <option value="battleroyale">Battle Royale</option>
-        <option value="experimental">Experimental</option>
-      </select>
+    <div class="field" id="customIPGroup" hidden>
+      <label>Server IP</label>
+      <input type="text" id="targetIP" placeholder="wss://server.agario.miniclippt.com" autocomplete="off" spellcheck="false">
     </div>
 
     <div class="field">
@@ -504,27 +347,18 @@
     </div>
 
     <div class="field">
-      <label>Party Code</label>
-      <div class="party-row">
-        <input type="text" id="partyCode" placeholder="Paste your party code" autocomplete="off">
-        <span class="party-tag" onclick="document.getElementById('partyCode').value=''">No Party</span>
-      </div>
+      <label>Party Code (optional)</label>
+      <input type="text" id="partyCode" placeholder="Paste party code to join your game" autocomplete="off">
     </div>
   </div>
 
-  <!-- BOTTOM: Controls (full width) -->
-  <div class="card full-width">
+  <!-- RIGHT: Controls -->
+  <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:12px">
-        <h2 style="font-size:16px;font-weight:600">Controls</h2>
-        <span class="state-badge idle" id="stateBadge">Idle</span>
-      </div>
-      <div style="font-size:12px;color:var(--text2)">
-        <span class="conn-dot ok" id="connDot"></span><span id="connLabel">Connected</span>
-      </div>
+      <h2 style="margin-bottom:0">Controls</h2>
+      <span class="state-badge idle" id="stateBadge">Idle</span>
     </div>
 
-    <!-- Status cards -->
     <div class="status-bar">
       <div class="stat-card">
         <div class="val val-blue" id="statBots">0</div>
@@ -535,52 +369,58 @@
         <div class="lbl">Connected</div>
       </div>
       <div class="stat-card">
-        <div class="val val-orange" id="statProxies">0</div>
-        <div class="lbl">Proxies</div>
+        <div class="val val-orange" id="statInGame">0</div>
+        <div class="lbl">In Game</div>
       </div>
     </div>
 
-    <!-- Custom IP (hidden when region selected) -->
-    <div class="field" id="customIPGroup">
-      <label>Server IP</label>
-      <input type="text" id="targetIP" placeholder="eu-west-2.mobile-live-v26.agario.miniclippt.com" autocomplete="off" spellcheck="false">
-    </div>
-
-    <!-- Bot mode + count -->
     <div style="display:flex;gap:12px;margin-bottom:16px">
       <div class="field" style="flex:1;margin-bottom:0">
         <label>Bot Mode</label>
         <select id="botMode">
-          <option value="feed">Feed</option>
           <option value="follow">Follow</option>
+          <option value="feed">Feed</option>
           <option value="teamer">Teamer</option>
           <option value="ai">AI</option>
           <option value="random">Random</option>
         </select>
       </div>
       <div class="slider-field" style="flex:1">
-        <label>Bots <span id="botCountLabel">10</span></label>
-        <input type="range" id="botCount" min="1" max="50" value="10">
+        <label>Bots <span id="botCountLabel">5</span></label>
+        <input type="range" id="botCount" min="1" max="50" value="5">
       </div>
     </div>
 
-    <!-- Action buttons -->
     <div class="ctrl-row">
       <button class="ctrl-btn btn-start" id="btnStart" onclick="startBots()">Start</button>
       <button class="ctrl-btn btn-stop" id="btnStop" onclick="stopBots()" disabled>Stop</button>
       <button class="ctrl-btn btn-pause" id="btnPause" onclick="pauseBots()" disabled>Pause</button>
-      <button class="ctrl-btn btn-resume" id="btnResume" onclick="resumeBots()" disabled>Resume</button>
     </div>
 
-    <!-- Proxy bar -->
     <div class="proxy-bar">
       <div class="proxy-dot" id="proxyDot"></div>
       <span id="proxyLabel">Loading...</span>
     </div>
+  </div>
 
-    <!-- Log -->
+  <!-- BOTTOM: Logs (full width) -->
+  <div class="card full-width">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="tab-bar" style="margin-bottom:0;flex:1;max-width:300px">
+        <button class="tab-btn active" onclick="switchLog('client')">Dashboard</button>
+        <button class="tab-btn" onclick="switchLog('server')">Server Logs</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span style="font-size:12px;color:var(--text2)"><span class="conn-dot ok" id="connDot"></span><span id="connLabel">Connected</span></span>
+        <button class="test-btn" onclick="testBouncer()">Test Bouncer</button>
+      </div>
+    </div>
+
     <div class="log-box" id="logBox">
-      <div class="log-entry info">Dashboard ready. Configure settings and start bots.</div>
+      <div class="log-entry info">Dashboard ready. Select a region and click Start.</div>
+    </div>
+    <div class="log-box" id="serverLogBox" hidden>
+      <div class="log-entry info">Server logs will appear here...</div>
     </div>
   </div>
 
@@ -592,51 +432,49 @@ let sessionId = localStorage.getItem('xrd_session') || crypto.randomUUID();
 localStorage.setItem('xrd_session', sessionId);
 let currentState = 'idle';
 let pollTimer = null;
+let logPollTimer = null;
+let lastLogTs = 0;
+let activeLogTab = 'client';
 
-const $ip = document.getElementById('targetIP');
-const $name = document.getElementById('botName');
-const $mode = document.getElementById('botMode');
-const $count = document.getElementById('botCount');
-const $countLabel = document.getElementById('botCountLabel');
-const $party = document.getElementById('partyCode');
-const $region = document.getElementById('region');
-const $gameMode = document.getElementById('gameMode');
-const $customIPGroup = document.getElementById('customIPGroup');
-const $statBots = document.getElementById('statBots');
-const $statConn = document.getElementById('statConnected');
-const $statProxy = document.getElementById('statProxies');
-const $badge = document.getElementById('stateBadge');
-const $proxyDot = document.getElementById('proxyDot');
-const $proxyLabel = document.getElementById('proxyLabel');
-const $connDot = document.getElementById('connDot');
-const $connLabel = document.getElementById('connLabel');
-const $log = document.getElementById('logBox');
-const $btnStart = document.getElementById('btnStart');
-const $btnStop = document.getElementById('btnStop');
-const $btnPause = document.getElementById('btnPause');
-const $btnResume = document.getElementById('btnResume');
-const $hideKey = document.getElementById('hideKey');
-const $secretKey = document.getElementById('secretKey');
+const $ = id => document.getElementById(id);
 
-try {
-  const s = localStorage.getItem('xrd_ip'); if (s) $ip.value = s;
-  const r = localStorage.getItem('xrd_region'); if (r) $region.value = r;
-  const p = localStorage.getItem('xrd_party'); if (p) $party.value = p;
-} catch(e) {}
+const $region = $('region');
+const $customIPGroup = $('customIPGroup');
+const $ip = $('targetIP');
+const $name = $('botName');
+const $mode = $('botMode');
+const $count = $('botCount');
+const $countLabel = $('botCountLabel');
+const $party = $('partyCode');
+const $statBots = $('statBots');
+const $statConn = $('statConnected');
+const $statInGame = $('statInGame');
+const $badge = $('stateBadge');
+const $proxyDot = $('proxyDot');
+const $proxyLabel = $('proxyLabel');
+const $connDot = $('connDot');
+const $connLabel = $('connLabel');
+const $log = $('logBox');
+const $serverLog = $('serverLogBox');
+const $btnStart = $('btnStart');
+const $btnStop = $('btnStop');
+const $btnPause = $('btnPause');
 
 $region.onchange = () => {
-  $customIPGroup.style.display = $region.value === '' ? 'block' : 'none';
-  try { localStorage.setItem('xrd_region', $region.value); } catch(e) {}
+  $customIPGroup.hidden = $region.value !== '';
 };
-$region.onchange();
 
 $count.oninput = () => { $countLabel.textContent = $count.value; };
-$ip.onchange = () => { try { localStorage.setItem('xrd_ip', $ip.value); } catch(e) {} };
-$party.onchange = () => { try { localStorage.setItem('xrd_party', $party.value); } catch(e) {} };
 
-$hideKey.onchange = () => {
-  $secretKey.type = $hideKey.checked ? 'password' : 'text';
-};
+function switchLog(tab) {
+  activeLogTab = tab;
+  $log.hidden = tab !== 'client';
+  $serverLog.hidden = tab !== 'server';
+  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+    btn.classList.toggle('active', (i === 0 && tab === 'client') || (i === 1 && tab === 'server'));
+  });
+  if (tab === 'server') fetchServerLogs();
+}
 
 function log(msg, type = '') {
   const ts = new Date().toLocaleTimeString();
@@ -645,7 +483,17 @@ function log(msg, type = '') {
   el.textContent = '[' + ts + '] ' + msg;
   $log.appendChild(el);
   $log.scrollTop = $log.scrollHeight;
-  if ($log.children.length > 100) $log.removeChild($log.firstChild);
+  if ($log.children.length > 200) $log.removeChild($log.firstChild);
+}
+
+function serverLog(msg, level) {
+  const el = document.createElement('div');
+  const cls = level === 'error' ? 'error' : (msg.includes('[Bouncer]') || msg.includes('[Debug]') ? 'info' : '');
+  el.className = 'log-entry ' + cls;
+  el.textContent = msg;
+  $serverLog.appendChild(el);
+  $serverLog.scrollTop = $serverLog.scrollHeight;
+  if ($serverLog.children.length > 300) $serverLog.removeChild($serverLog.firstChild);
 }
 
 function setState(state) {
@@ -655,7 +503,6 @@ function setState(state) {
   $btnStart.disabled = state === 'running' || state === 'paused';
   $btnStop.disabled = state === 'idle';
   $btnPause.disabled = state !== 'running';
-  $btnResume.disabled = state !== 'paused';
 }
 
 async function apiPost(path, data) {
@@ -678,7 +525,7 @@ async function apiGet(path) {
 }
 
 function verifyKey() {
-  const key = $secretKey.value.trim();
+  const key = $('secretKey').value.trim();
   if (!key) { log('Enter a key first.', 'error'); return; }
   log('Verifying key...', 'info');
   apiPost('/getsecretkey.php', { sk: key }).then(r => {
@@ -690,7 +537,27 @@ function verifyKey() {
 function clearUID() {
   sessionId = crypto.randomUUID();
   localStorage.setItem('xrd_session', sessionId);
-  log('Session cleared. New UID: ' + sessionId.slice(0, 8), 'info');
+  log('New session: ' + sessionId.slice(0, 8), 'info');
+}
+
+async function testBouncer() {
+  const region = $region.value || 'eu-west-2';
+  log('Testing bouncer for region: ' + region + '...', 'info');
+  const res = await apiGet('/debug/bouncer?region=' + encodeURIComponent(region));
+  if (!res) {
+    log('Bouncer test failed: no response from server', 'error');
+    return;
+  }
+  if (res.status === 'ok') {
+    log('Bouncer OK! Server: ' + res.server, 'success');
+    log('WebSocket URL: ' + res.ws_url, 'info');
+    log('Client version: ' + res.client_version, 'info');
+  } else {
+    log('Bouncer FAILED: ' + res.error, 'error');
+    log('Client version: ' + res.client_version, 'info');
+  }
+  // Also fetch server logs to show bouncer debug output
+  setTimeout(fetchServerLogs, 500);
 }
 
 async function startBots() {
@@ -700,27 +567,34 @@ async function startBots() {
     log('Select a region or enter a server IP!', 'error');
     return;
   }
-  const target = region ? region : ip;
+
+  const count = $count.value;
   const party = $party.value.trim();
-  log('Starting ' + $count.value + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
+  const target = region || ip;
+  log('Starting ' + count + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
+
   const res = await apiPost('/botter2.php', {
     action: 'start',
     session_id: sessionId,
     targetip: region ? undefined : ip,
     region: region || undefined,
-    game_mode: $gameMode.value,
     mode: $mode.value,
     bot_name: $name.value,
-    bot_count: $count.value,
+    bot_count: count,
     party_code: party || undefined,
   });
-  if (res && res.api_response) {
+
+  if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    log('Started ' + (res.bots_started || $count.value) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
+    log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
     startPolling();
   } else {
-    log('Failed: ' + (res ? res.text : 'no response'), 'error');
+    log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');
   }
+  // Fetch server logs after a delay to see connection attempts
+  setTimeout(fetchServerLogs, 2000);
+  setTimeout(fetchServerLogs, 5000);
+  setTimeout(fetchServerLogs, 10000);
 }
 
 async function stopBots() {
@@ -732,6 +606,7 @@ async function stopBots() {
     stopPolling();
     $statBots.textContent = '0';
     $statConn.textContent = '0';
+    $statInGame.textContent = '0';
   }
 }
 
@@ -739,12 +614,6 @@ async function pauseBots() {
   log('Pausing bots...', 'warn');
   const res = await apiPost('/botter2.php', { action: 'pause', session_id: sessionId });
   if (res && res.api_response) { setState('paused'); log('Paused.', 'warn'); }
-}
-
-async function resumeBots() {
-  log('Resuming...', 'info');
-  const res = await apiPost('/botter2.php', { action: 'resume', session_id: sessionId });
-  if (res && res.api_response) { setState('running'); log('Resumed.', 'success'); }
 }
 
 async function pollStatus() {
@@ -756,15 +625,19 @@ async function pollStatus() {
   }
   $connDot.className = 'conn-dot ok';
   $connLabel.textContent = 'Connected';
-  $statProxy.textContent = data.proxies ? data.proxies.alive : '0';
   $statBots.textContent = data.total_bots || '0';
   $statConn.textContent = data.total_connected || '0';
+  $statInGame.textContent = data.total_in_game || '0';
+
+  if (data.total_in_game > 0 && currentState === 'running') {
+    log('Bots in game: ' + data.total_in_game, 'success');
+  }
 
   if (data.proxies) {
     const p = data.proxies;
     if (p.total === 0) {
       $proxyDot.className = 'proxy-dot none';
-      $proxyLabel.textContent = 'No proxies configured';
+      $proxyLabel.textContent = 'No proxies (direct connection)';
     } else if (p.alive === 0) {
       $proxyDot.className = 'proxy-dot dead';
       $proxyLabel.textContent = p.total + ' proxies (all dead)';
@@ -775,10 +648,29 @@ async function pollStatus() {
   }
 }
 
-function startPolling() { stopPolling(); pollTimer = setInterval(pollStatus, 2000); }
-function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+async function fetchServerLogs() {
+  const data = await apiGet('/debug/logs?since=' + lastLogTs);
+  if (!data || !data.logs) return;
+  for (const entry of data.logs) {
+    if (entry.ts > lastLogTs) lastLogTs = entry.ts;
+    serverLog(entry.msg, entry.level);
+  }
+}
 
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(pollStatus, 2000);
+  logPollTimer = setInterval(fetchServerLogs, 3000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (logPollTimer) { clearInterval(logPollTimer); logPollTimer = null; }
+}
+
+// Initial load
 pollStatus();
+fetchServerLogs();
 setInterval(pollStatus, 5000);
 </script>
 </body>

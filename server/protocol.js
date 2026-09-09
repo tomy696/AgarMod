@@ -305,23 +305,57 @@ async function findServer(region, gameMode) {
       let data = [];
       res.on('data', (c) => data.push(c));
       res.on('end', () => {
-        const text = Buffer.concat(data).toString();
+        const raw = Buffer.concat(data);
+        console.log(`[Bouncer] Response status: ${res.statusCode}, length: ${raw.length}, content-type: ${res.headers['content-type']}`);
+
+        // Try JSON first
+        const text = raw.toString();
         try {
           const parsed = JSON.parse(text);
           if (parsed.status === 'ok' && parsed.endpoints) {
             const server = parsed.endpoints.https || parsed.endpoints.http;
             if (server && server !== '0.0.0.0:0') {
-              console.log(`[Bouncer] Found server: ${server} (region: ${bouncerRegion})`);
+              console.log(`[Bouncer] JSON server: ${server} (region: ${bouncerRegion})`);
               resolve({ server, token: parsed.token || null });
-            } else {
-              reject(new Error('Bouncer returned empty server'));
+              return;
             }
-          } else {
-            reject(new Error(`Bouncer error: ${text.slice(0, 200)}`));
           }
-        } catch (e) {
-          reject(new Error(`Bouncer parse error: ${text.slice(0, 200)}`));
+          if (parsed.endpoints) {
+            console.log(`[Bouncer] JSON endpoints:`, JSON.stringify(parsed.endpoints));
+          }
+        } catch (_) {}
+
+        // Try extracting server URL from protobuf-like binary
+        const urls = [];
+        let i = 0;
+        while (i < raw.length) {
+          // Look for strings that look like server addresses
+          if (raw[i] > 0x20 && raw[i] < 0x7f) {
+            let str = '';
+            let j = i;
+            while (j < raw.length && raw[j] >= 0x20 && raw[j] < 0x7f) {
+              str += String.fromCharCode(raw[j]);
+              j++;
+            }
+            if (str.length > 10 && (str.includes('.agario.') || str.includes('miniclip') || str.includes('live-v') || str.includes('web-arenas'))) {
+              urls.push(str);
+            }
+            i = j;
+          } else {
+            i++;
+          }
         }
+
+        if (urls.length > 0) {
+          const server = urls[0];
+          console.log(`[Bouncer] Protobuf server: ${server} (region: ${bouncerRegion})`);
+          resolve({ server, token: null });
+          return;
+        }
+
+        console.log(`[Bouncer] Raw hex (first 100): ${raw.slice(0, 100).toString('hex')}`);
+        console.log(`[Bouncer] Raw text: ${text.slice(0, 300)}`);
+        reject(new Error(`Bouncer: no server found in response (${raw.length} bytes)`));
       });
     });
     req.on('error', reject);

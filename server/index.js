@@ -395,9 +395,70 @@ app.get('/health', (_req, res) => {
 
 // Reload proxies at runtime
 app.post('/admin/reload-proxies', (req, res) => {
-  const file = req.body.file || proxyFile;
+  const file = req.body.file || path.join(__dirname, 'proxies.txt');
   const count = botManager.proxyPool.loadFromFile(file);
   res.json({ status: 'ok', proxies_loaded: count, ...botManager.proxyPool.getStats() });
+});
+
+// ---------------------------------------------------------------------------
+// Debug endpoints
+// ---------------------------------------------------------------------------
+
+const proto2 = require('./protocol');
+
+// Ring buffer for server-side logs
+const LOG_BUFFER_SIZE = 200;
+const logBuffer = [];
+const origLog = console.log;
+const origErr = console.error;
+console.log = (...args) => {
+  origLog(...args);
+  const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ');
+  logBuffer.push({ ts: Date.now(), level: 'info', msg });
+  if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
+};
+console.error = (...args) => {
+  origErr(...args);
+  const msg = args.map(a => typeof a === 'string' ? a : (a instanceof Error ? a.message : JSON.stringify(a))).join(' ');
+  logBuffer.push({ ts: Date.now(), level: 'error', msg });
+  if (logBuffer.length > LOG_BUFFER_SIZE) logBuffer.shift();
+};
+
+app.get('/debug/logs', (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  const entries = since ? logBuffer.filter(l => l.ts > since) : logBuffer.slice(-50);
+  res.json({ logs: entries });
+});
+
+app.get('/debug/bouncer', async (req, res) => {
+  const region = req.query.region || 'eu-west-2';
+  const mode = req.query.mode || ':ffa';
+  const bouncerRegion = proto2.REGION_MAP[region] || region;
+
+  console.log(`[Debug] Testing bouncer: region=${region} → ${bouncerRegion}, mode=${mode}`);
+
+  try {
+    const result = await proto2.findServer(region, mode);
+    console.log(`[Debug] Bouncer success: ${JSON.stringify(result)}`);
+    res.json({
+      status: 'ok',
+      region,
+      bouncer_region: bouncerRegion,
+      server: result.server,
+      token: result.token,
+      ws_url: `wss://${result.server}`,
+      client_version: proto2.CLIENT_VERSION,
+    });
+  } catch (err) {
+    console.error(`[Debug] Bouncer failed:`, err.message);
+    res.json({
+      status: 'error',
+      region,
+      bouncer_region: bouncerRegion,
+      error: err.message,
+      client_version: proto2.CLIENT_VERSION,
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
