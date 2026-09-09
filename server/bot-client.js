@@ -81,10 +81,6 @@ class BotClient extends EventEmitter {
       }
     }
 
-    if (this.partyCode && !url.includes('party_id=')) {
-      url += (url.includes('?') ? '&' : '?') + `party_id=${this.partyCode}`;
-    }
-
     this.serverUrl = url;
 
     const via = proxy ? ` via proxy` : ' (direct)';

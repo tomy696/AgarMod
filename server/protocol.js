@@ -380,80 +380,11 @@ async function findServer(region, gameMode, partyToken, customHost) {
   });
 }
 
+// findMobileServer: uses the same bouncer but with :party mode for party codes
+// (mc-api.agar.io is no longer available — mobile and web share the same bouncer)
 async function findMobileServer(region, gameMode, partyCode) {
-  const https = require('https');
-  const bouncerRegion = REGION_MAP[region] || region;
-  const resolvedMode = GAME_MODE_MAP[gameMode] || gameMode || ':ffa';
-
-  let bodyObj;
-  if (partyCode) {
-    bodyObj = { region: bouncerRegion, mode: ':party', token: partyCode };
-    console.log(`[MobileAPI] Party join: region=${bouncerRegion}, party=${partyCode}`);
-  } else {
-    bodyObj = { region: bouncerRegion, mode: resolvedMode };
-    console.log(`[MobileAPI] Find server: region=${bouncerRegion}, mode=${resolvedMode}`);
-  }
-
-  const body = JSON.stringify(bodyObj);
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: MOBILE_API_HOST,
-      path: '/api/v1/server',
-      method: 'POST',
-      rejectUnauthorized: false,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Origin': 'https://agar.io',
-        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-        'Content-Length': Buffer.byteLength(body),
-      },
-    }, (res) => {
-      let data = [];
-      res.on('data', (c) => data.push(c));
-      res.on('end', () => {
-        const raw = Buffer.concat(data);
-        const text = raw.toString();
-        console.log(`[MobileAPI] Response: HTTP ${res.statusCode}, ${text.slice(0, 500)}`);
-
-        try {
-          const json = JSON.parse(text);
-
-          if (json.endpoints && Array.isArray(json.endpoints) && json.endpoints.length > 0) {
-            const serverUrl = json.endpoints[0].url;
-            if (serverUrl) {
-              console.log(`[MobileAPI] Server found: ${serverUrl}`);
-              resolve({ server: serverUrl, token: json.token || null });
-              return;
-            }
-          }
-
-          if (json.endpoints && typeof json.endpoints === 'object' && !Array.isArray(json.endpoints)) {
-            const serverPath = json.endpoints.https || json.endpoints.http;
-            if (serverPath) {
-              console.log(`[MobileAPI] Server found (web format): ${serverPath}`);
-              resolve({ server: serverPath, token: json.token || null });
-              return;
-            }
-          }
-
-          console.log(`[MobileAPI] No server in response:`, text.slice(0, 300));
-          reject(new Error(`MobileAPI: no server found in response`));
-        } catch (e) {
-          console.log(`[MobileAPI] Parse error:`, e.message, text.slice(0, 200));
-          reject(new Error(`MobileAPI parse error: ${e.message}`));
-        }
-      });
-    });
-    req.on('error', (err) => {
-      console.error(`[MobileAPI] Request error:`, err.message);
-      reject(err);
-    });
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('MobileAPI timeout')); });
-    req.write(body);
-    req.end();
-  });
+  const mode = partyCode ? ':party' : gameMode;
+  return findServer(region, mode, partyCode);
 }
 
 module.exports = {
