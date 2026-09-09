@@ -19,7 +19,6 @@ static char s_targetServerIP[128]= "";
 static bool s_buffersInitialized = false;
 
 static int  s_currentTab     = 0;
-static int  s_activeBotCount = 0;
 
 static const char* kBotModes[] = {
     "Move", "Feed", "Farm", "MakeVirus", "BreakVirus", "Teamer"
