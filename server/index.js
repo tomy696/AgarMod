@@ -434,17 +434,19 @@ app.get('/debug/logs', (req, res) => {
 app.get('/debug/bouncer', async (req, res) => {
   const region = req.query.region || 'eu-west-2';
   const mode = req.query.mode || ':ffa';
+  const host = req.query.host || null;
   const bouncerRegion = proto2.REGION_MAP[region] || region;
 
-  console.log(`[Debug] Testing bouncer: region=${region} → ${bouncerRegion}, mode=${mode}`);
+  console.log(`[Debug] Testing bouncer: region=${region} → ${bouncerRegion}, mode=${mode}, host=${host || 'default'}`);
 
   try {
-    const result = await proto2.findServer(region, mode);
+    const result = await proto2.findServer(region, mode, null, host);
     console.log(`[Debug] Bouncer success: ${JSON.stringify(result)}`);
     res.json({
       status: 'ok',
       region,
       bouncer_region: bouncerRegion,
+      bouncer_host: host || proto2.BOUNCER_HOST,
       server: result.server,
       token: result.token,
       ws_url: `wss://${result.server}`,
@@ -456,6 +458,7 @@ app.get('/debug/bouncer', async (req, res) => {
       status: 'error',
       region,
       bouncer_region: bouncerRegion,
+      bouncer_host: host || proto2.BOUNCER_HOST,
       error: err.message,
       client_version: proto2.CLIENT_VERSION,
     });

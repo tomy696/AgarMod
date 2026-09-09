@@ -292,16 +292,17 @@ const REGION_MAP = {
   'me-south-1': 'TK-Turkey',
 };
 
-async function findServer(region, gameMode, partyToken) {
+async function findServer(region, gameMode, partyToken, customHost) {
   const https = require('https');
   const bouncerRegion = REGION_MAP[region] || region;
   const resolvedMode = GAME_MODE_MAP[gameMode] || gameMode || ':ffa';
   const body = buildBouncerRequest(bouncerRegion, resolvedMode, partyToken);
-  console.log(`[Bouncer] Request: region=${bouncerRegion}, mode=${resolvedMode}, party=${partyToken || 'none'}`);
+  const host = customHost || BOUNCER_HOST;
+  console.log(`[Bouncer] Request: host=${host}, region=${bouncerRegion}, mode=${resolvedMode}, party=${partyToken || 'none'}`);
 
   return new Promise((resolve, reject) => {
     const req = https.request({
-      hostname: BOUNCER_HOST,
+      hostname: host,
       path: '/v4/findServer',
       method: 'POST',
       rejectUnauthorized: false,
