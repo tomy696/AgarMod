@@ -81,13 +81,12 @@ jobs:
       - name: Setup injection tools
         if: steps.get_ipa.outputs.has_ipa == 'true'
         run: |
-          # Build optool from source
-          git clone https://github.com/alexzielenski/optool.git /tmp/optool
-          cd /tmp/optool
-          xcodebuild -project optool.xcodeproj -scheme optool \
-            -configuration Release SYMROOT=/tmp/optool-build \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -5
-          sudo cp /tmp/optool-build/Release/optool /usr/local/bin/
+          # Build insert_dylib from source (simpler than optool)
+          git clone https://github.com/tyilo/insert_dylib.git /tmp/insert_dylib
+          cd /tmp/insert_dylib
+          gcc insert_dylib/main.c -o insert_dylib -framework Security -O2 2>&1
+          sudo cp insert_dylib /usr/local/bin/
+          echo "insert_dylib installed successfully"
 
       - name: Inject dylib into IPA
         if: steps.get_ipa.outputs.has_ipa == 'true'
