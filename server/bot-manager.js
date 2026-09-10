@@ -149,8 +149,14 @@ class BotManager {
     const count = Math.max(1, Math.min(100, botCount));
 
     let resolvedUrl = targetIP;
-    const isRegion = !targetIP.startsWith('ws') && !targetIP.includes('/') && !targetIP.includes('.');
-    if (isRegion) {
+    const isDirectUrl = targetIP.startsWith('ws://') || targetIP.startsWith('wss://');
+    const isRegion = !isDirectUrl && !targetIP.includes('/') && !targetIP.includes('.');
+
+    // Direct URL with party code: append ?party_id=CODE
+    if (isDirectUrl && partyCode) {
+      resolvedUrl = targetIP + (targetIP.includes('?') ? '&' : '?') + `party_id=${encodeURIComponent(partyCode)}`;
+      console.log(`[BotManager] Direct server + party: ${resolvedUrl}`);
+    } else if (isRegion) {
       try {
         if (partyCode) {
           console.log(`[BotManager] Joining party: code=${partyCode}, region=${targetIP}`);

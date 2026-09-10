@@ -500,6 +500,29 @@ app.get('/debug/mobile', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/create-party — Create a party and return server + code
+// ---------------------------------------------------------------------------
+
+app.post('/api/create-party', async (req, res) => {
+  const { region } = req.body;
+  if (!region) return res.json({ status: 'error', error: 'Missing region' });
+
+  try {
+    const result = await proto2.findServer(region, ':party');
+    console.log(`[Party] Created party: server=${result.server}, code=${result.token}`);
+    res.json({
+      status: 'ok',
+      server: result.server,
+      party_code: result.token,
+      ws_url: `wss://${result.server}`,
+    });
+  } catch (err) {
+    console.error(`[Party] Failed:`, err.message);
+    res.json({ status: 'error', error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 

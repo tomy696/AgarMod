@@ -357,8 +357,14 @@
     </div>
 
     <div class="field">
-      <label>Party Code (optional — bots join YOUR server)</label>
-      <input type="text" id="partyCode" placeholder="Ex: 5DNGG9" autocomplete="off" style="text-transform:uppercase">
+      <label>Party Code</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="partyCode" placeholder="Click Create Party →" autocomplete="off" style="text-transform:uppercase;flex:1" readonly>
+        <button onclick="createParty()" id="btnCreateParty" style="padding:10px 16px;background:var(--green);color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap;font-size:13px">Create Party</button>
+      </div>
+      <div id="partyBanner" style="display:none;margin-top:8px;padding:12px;background:var(--green);color:#000;border-radius:8px;text-align:center;font-weight:700;font-size:15px">
+        Join this code on your phone: <span id="partyCodeDisplay" style="font-size:22px;letter-spacing:3px"></span>
+      </div>
     </div>
   </div>
 
@@ -590,24 +596,55 @@ async function testBouncer() {
   setTimeout(fetchServerLogs, 500);
 }
 
+let createdPartyServer = null;
+
+async function createParty() {
+  const region = $region.value;
+  if (!region) { log('Select a region first!', 'error'); return; }
+
+  log('Creating party in ' + region + '...', 'info');
+  $('btnCreateParty').disabled = true;
+
+  const res = await apiPost('/api/create-party', { region });
+  if (res && res.status === 'ok') {
+    createdPartyServer = res.ws_url;
+    $party.value = res.party_code;
+    $('partyCodeDisplay').textContent = res.party_code;
+    $('partyBanner').style.display = 'block';
+    log('Party created! Code: ' + res.party_code + ' — Server: ' + res.server.split('/').pop(), 'success');
+    log('Enter this code on your phone, then click START to launch bots on the same server.', 'info');
+  } else {
+    log('Failed to create party: ' + (res ? res.error : 'no response'), 'error');
+  }
+  $('btnCreateParty').disabled = false;
+}
+
 async function startBots() {
   const region = $region.value;
   const ip = $ip.value.trim();
-  if (!region && !ip) {
-    log('Select a region or enter a server IP!', 'error');
+  if (!region && !ip && !createdPartyServer) {
+    log('Select a region or create a party first!', 'error');
     return;
   }
 
   const count = $count.value;
   const party = $party.value.trim();
-  const target = region || ip;
+  let targetip = region ? undefined : ip;
+
+  // If a party was created via our server, use that exact server
+  if (createdPartyServer && party) {
+    targetip = createdPartyServer;
+    log('Using party server: ' + createdPartyServer.replace('wss://', '').split('/').pop(), 'info');
+  }
+
+  const target = targetip || region || ip;
   log('Starting ' + count + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
 
   const res = await apiPost('/botter2.php', {
     action: 'start',
     session_id: sessionId,
-    targetip: region ? undefined : ip,
-    region: region || undefined,
+    targetip: targetip || (region ? undefined : ip),
+    region: targetip ? undefined : (region || undefined),
     mode: $mode.value,
     game_mode: $gameMode.value,
     bot_name: $name.value,
@@ -617,11 +654,7 @@ async function startBots() {
 
   if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    const servers = res.servers_scanning || 1;
-    const msg = 'Started ' + (res.bots_started || count) + ' bots.' +
-      (servers > 1 ? ' Scanning ' + servers + ' servers to find your party.' : '') +
-      ' Proxies: ' + (res.proxies_alive || 0) + ' alive.';
-    log(msg, 'success');
+    log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
     startPolling();
   } else {
     log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');
