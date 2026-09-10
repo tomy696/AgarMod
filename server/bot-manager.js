@@ -34,100 +34,88 @@ class BotManager {
    * @param {number} [config.targetY]
    * @returns {{ botsStarted: number }}
    */
-  async _scanForPartyServer(region, partyCode) {
+  async _scanForPlayer(region, partyCode, nickname) {
     const servers = new Set();
-    const scanCount = 15;
-    console.log(`[Scanner] Collecting servers in ${region} (${scanCount} queries)...`);
+    const scanCount = 20;
+    console.log(`[Scanner] Discovering servers in ${region} (${scanCount} queries)...`);
 
     for (let i = 0; i < scanCount; i++) {
       try {
         const { server } = await proto.findServer(region, ':ffa');
         servers.add(server);
       } catch (_) {}
-      if (i < scanCount - 1) await new Promise(r => setTimeout(r, 300));
+      if (i < scanCount - 1) await new Promise(r => setTimeout(r, 250));
     }
 
     const unique = [...servers];
-    console.log(`[Scanner] Found ${unique.length} unique servers, probing with party_id=${partyCode}...`);
+    console.log(`[Scanner] Found ${unique.length} unique servers, scanning for "${nickname}"...`);
 
-    const WebSocket = require('ws');
-    const results = [];
+    if (unique.length === 0) throw new Error('No servers found in region');
 
-    const probeServer = (serverUrl) => {
-      return new Promise((resolve) => {
-        const url = `wss://${serverUrl}?party_id=${encodeURIComponent(partyCode)}`;
-        const timeout = setTimeout(() => { try { ws.close(); } catch(_){} resolve({ serverUrl, ok: false, reason: 'timeout' }); }, 8000);
-        let ws;
-        try {
-          ws = new WebSocket(url, {
-            headers: { 'Origin': 'https://agar.io', 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
-            rejectUnauthorized: false, handshakeTimeout: 8000,
-          });
-          ws.binaryType = 'nodebuffer';
-          let gotEncryption = false;
-          ws.on('open', () => {
-            ws.send(proto.buildProtocolVersion());
-            ws.send(proto.buildClientVersion());
-          });
-          ws.on('message', (data) => {
-            const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-            if (buf.length > 0) {
-              const op = buf.readUInt8(0);
-              if (op === 241) gotEncryption = true;
-            }
-          });
-          ws.on('close', (code) => {
-            clearTimeout(timeout);
-            if (code === 14 || code === 15) {
-              resolve({ serverUrl, ok: false, reason: `disconnect:${code}` });
-            } else if (gotEncryption) {
-              resolve({ serverUrl, ok: true, reason: 'connected+encrypted' });
-            } else {
-              resolve({ serverUrl, ok: false, reason: `close:${code}` });
-            }
-          });
-          ws.on('error', () => {
-            clearTimeout(timeout);
-            resolve({ serverUrl, ok: false, reason: 'error' });
-          });
-          setTimeout(() => {
-            if (gotEncryption) {
-              clearTimeout(timeout);
-              try { ws.close(); } catch(_){}
-              resolve({ serverUrl, ok: true, reason: 'connected+encrypted' });
-            }
-          }, 4000);
-        } catch (e) {
-          clearTimeout(timeout);
-          resolve({ serverUrl, ok: false, reason: 'exception' });
+    return new Promise((resolve) => {
+      const scouts = [];
+      let resolved = false;
+      const checkIntervals = [];
+
+      const cleanup = () => {
+        for (const iv of checkIntervals) clearInterval(iv);
+        for (const s of scouts) {
+          try { s.disconnect(); } catch (_) {}
         }
-      });
-    };
+      };
 
-    // Probe servers in batches of 5
-    for (let i = 0; i < unique.length; i += 5) {
-      const batch = unique.slice(i, i + 5);
-      const batchResults = await Promise.all(batch.map(s => probeServer(s)));
-      results.push(...batchResults);
-      console.log(`[Scanner] Batch ${Math.floor(i/5)+1}: ${batchResults.map(r => r.serverUrl.split('/').pop() + '=' + r.reason).join(', ')}`);
-    }
+      for (let i = 0; i < unique.length; i++) {
+        const serverUrl = unique[i];
+        const scoutUrl = `wss://${serverUrl}?party_id=${encodeURIComponent(partyCode)}`;
 
-    // All servers that connected successfully are candidates
-    // Servers that disconnect with code 14/15 are definitely wrong (invalid/expired token)
-    const good = results.filter(r => r.ok);
-    const bad = results.filter(r => !r.ok && r.reason.startsWith('disconnect:'));
+        const scout = new BotClient({
+          id: 90000 + i,
+          name: `Scout`,
+          partyCode,
+          gameMode: 'ffa',
+        });
+        scouts.push(scout);
 
-    console.log(`[Scanner] Results: ${good.length} connected, ${bad.length} rejected token, ${results.length - good.length - bad.length} other`);
+        scout.on('gameJoined', () => {
+          const iv = setInterval(() => {
+            if (resolved) { clearInterval(iv); return; }
+            if (scout.hasPlayerNamed(nickname)) {
+              console.log(`[Scanner] FOUND "${nickname}" on ${serverUrl}`);
+              resolved = true;
+              cleanup();
+              resolve(serverUrl);
+            }
+          }, 400);
+          checkIntervals.push(iv);
+        });
 
-    if (good.length > 0) {
-      // Can't distinguish the right one from the probe alone — all accept connections
-      // Return the first one; the party_id param should route us inside the right server
-      return good[0].serverUrl;
-    }
+        scout.on('error', () => {});
 
-    // If all failed, just return a random server
-    if (unique.length > 0) return unique[0];
-    throw new Error('No servers found in region');
+        const delay = i * 400;
+        setTimeout(() => {
+          if (!resolved) scout.connect(scoutUrl, null);
+        }, delay);
+      }
+
+      const totalTimeout = 8000 + unique.length * 400;
+      setTimeout(() => {
+        if (!resolved) {
+          console.log(`[Scanner] Timeout — "${nickname}" not found on ${unique.length} servers`);
+
+          const names = new Set();
+          for (const s of scouts) {
+            for (const n of s.getVisiblePlayerNames()) names.add(n);
+          }
+          if (names.size > 0) {
+            console.log(`[Scanner] Visible players: ${[...names].slice(0, 20).join(', ')}`);
+          }
+
+          resolved = true;
+          cleanup();
+          resolve(null);
+        }
+      }, totalTimeout);
+    });
   }
 
   async startBots(config) {
@@ -159,27 +147,41 @@ class BotManager {
     } else if (isRegion) {
       try {
         if (partyCode) {
-          console.log(`[BotManager] Joining party: code=${partyCode}, region=${targetIP}`);
-          // Scan all servers in the region, distribute bots across them
-          // since we can't resolve party codes (v4/getToken is dead)
-          const servers = new Set();
-          const scanCount = 20;
-          for (let i = 0; i < scanCount; i++) {
-            try {
-              const { server } = await proto.findServer(targetIP, ':ffa');
-              servers.add(server);
-            } catch (_) {}
-            if (i < scanCount - 1) await new Promise(r => setTimeout(r, 200));
+          const nickname = config.nickname;
+          console.log(`[BotManager] Joining party: code=${partyCode}, region=${targetIP}, nickname=${nickname || 'none'}`);
+
+          if (nickname) {
+            const foundServer = await this._scanForPlayer(targetIP, partyCode, nickname);
+            if (foundServer) {
+              config._playerFound = true;
+              console.log(`[BotManager] Player found! All ${count} bots → ${foundServer}`);
+              resolvedUrl = `wss://${foundServer}?party_id=${encodeURIComponent(partyCode)}`;
+            } else {
+              console.log(`[BotManager] Player not found, falling back to scatter across all servers`);
+              const servers = new Set();
+              for (let i = 0; i < 15; i++) {
+                try { const { server } = await proto.findServer(targetIP, ':ffa'); servers.add(server); } catch (_) {}
+                if (i < 14) await new Promise(r => setTimeout(r, 250));
+              }
+              const unique = [...servers];
+              if (unique.length === 0) throw new Error('No servers found');
+              config._partyServers = unique;
+              config._partyCode = partyCode;
+              resolvedUrl = `wss://${unique[0]}?party_id=${encodeURIComponent(partyCode)}`;
+            }
+          } else {
+            const servers = new Set();
+            for (let i = 0; i < 15; i++) {
+              try { const { server } = await proto.findServer(targetIP, ':ffa'); servers.add(server); } catch (_) {}
+              if (i < 14) await new Promise(r => setTimeout(r, 250));
+            }
+            const unique = [...servers];
+            if (unique.length === 0) throw new Error('No servers found');
+            config._partyServers = unique;
+            config._partyCode = partyCode;
+            console.log(`[BotManager] No nickname provided, scattering bots across ${unique.length} servers`);
+            resolvedUrl = `wss://${unique[0]}?party_id=${encodeURIComponent(partyCode)}`;
           }
-          const unique = [...servers];
-          console.log(`[BotManager] Found ${unique.length} servers in region, sending bots to ALL with party_id=${partyCode}`);
-
-          if (unique.length === 0) throw new Error('No servers found');
-
-          // Store all servers — bots will be distributed across them
-          config._partyServers = unique;
-          config._partyCode = partyCode;
-          resolvedUrl = `wss://${unique[0]}?party_id=${encodeURIComponent(partyCode)}`;
         } else {
           console.log(`[BotManager] Finding server: region=${targetIP}, mode=${config.gameMode || 'ffa'}`);
           const { server } = await proto.findServer(targetIP, config.gameMode || 'ffa');
@@ -261,7 +263,7 @@ class BotManager {
       }, delay);
     }
 
-    return { botsStarted: count };
+    return { botsStarted: count, playerFound: !!config._playerFound };
   }
 
   /**

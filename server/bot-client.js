@@ -513,6 +513,28 @@ class BotClient extends EventEmitter {
     if (this._spawnDelay) { clearTimeout(this._spawnDelay); this._spawnDelay = null; }
   }
 
+  hasPlayerNamed(name) {
+    const lower = name.toLowerCase();
+    for (const id in this.entities) {
+      const e = this.entities[id];
+      if (e.name && e.name.toLowerCase() === lower && !this.cellsIDs.includes(e.id)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getVisiblePlayerNames() {
+    const names = new Set();
+    for (const id in this.entities) {
+      const e = this.entities[id];
+      if (e.name && !this.cellsIDs.includes(e.id) && !e.isPellet) {
+        names.add(e.name);
+      }
+    }
+    return names;
+  }
+
   getStatus() {
     return {
       id: this.id,

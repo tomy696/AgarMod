@@ -198,6 +198,7 @@ app.post('/botter2.php', async (req, res) => {
     bot_count: botCountRaw = '1',
     party_code: partyCode,
     party,
+    nickname,
     player_state: playerState,
     target_x: targetXRaw = '0',
     target_y: targetYRaw = '0',
@@ -233,7 +234,7 @@ app.post('/botter2.php', async (req, res) => {
         });
       }
 
-      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'})`);
+      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'}, nickname: ${nickname || 'none'})`);
 
       const result = await botManager.startBots({
         sessionId,
@@ -243,6 +244,7 @@ app.post('/botter2.php', async (req, res) => {
         botName,
         botCount,
         partyCode: code,
+        nickname: nickname || undefined,
         targetX,
         targetY,
       });
@@ -256,6 +258,7 @@ app.post('/botter2.php', async (req, res) => {
         bots_running: status.bots_running,
         bots_connected: status.bots_connected,
         bots_started: result.botsStarted,
+        player_found: result.playerFound,
         servers_scanning: status.servers_scanning || 1,
         proxies_alive: proxyStats.alive,
         proxies_total: proxyStats.total,

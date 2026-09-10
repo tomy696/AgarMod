@@ -357,14 +357,14 @@
     </div>
 
     <div class="field">
-      <label>Party Code</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="text" id="partyCode" placeholder="Click Create Party →" autocomplete="off" style="text-transform:uppercase;flex:1" readonly>
-        <button onclick="createParty()" id="btnCreateParty" style="padding:10px 16px;background:var(--green);color:#000;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap;font-size:13px">Create Party</button>
-      </div>
-      <div id="partyBanner" style="display:none;margin-top:8px;padding:12px;background:var(--green);color:#000;border-radius:8px;text-align:center;font-weight:700;font-size:15px">
-        Join this code on your phone: <span id="partyCodeDisplay" style="font-size:22px;letter-spacing:3px"></span>
-      </div>
+      <label>Party Code <span style="font-weight:400;color:var(--text2)">(from your phone)</span></label>
+      <input type="text" id="partyCode" placeholder="Enter your party code (e.g. XFSAQ3)" autocomplete="off" style="text-transform:uppercase">
+    </div>
+
+    <div class="field">
+      <label>Your Nickname <span style="font-weight:400;color:var(--text2)">(your in-game name)</span></label>
+      <input type="text" id="nickname" placeholder="Your exact in-game name" autocomplete="off" maxlength="15">
+      <div style="margin-top:4px;font-size:11px;color:var(--text2)">Required to find your server. Must match exactly.</div>
     </div>
   </div>
 
@@ -464,6 +464,7 @@ const $gameMode = $('gameMode');
 const $count = $('botCount');
 const $countLabel = $('botCountLabel');
 const $party = $('partyCode');
+const $nickname = $('nickname');
 const $statBots = $('statBots');
 const $statConn = $('statConnected');
 const $statInGame = $('statInGame');
@@ -596,65 +597,51 @@ async function testBouncer() {
   setTimeout(fetchServerLogs, 500);
 }
 
-let createdPartyServer = null;
-
-async function createParty() {
-  const region = $region.value;
-  if (!region) { log('Select a region first!', 'error'); return; }
-
-  log('Creating party in ' + region + '...', 'info');
-  $('btnCreateParty').disabled = true;
-
-  const res = await apiPost('/api/create-party', { region });
-  if (res && res.status === 'ok') {
-    createdPartyServer = res.ws_url;
-    $party.value = res.party_code;
-    $('partyCodeDisplay').textContent = res.party_code;
-    $('partyBanner').style.display = 'block';
-    log('Party created! Code: ' + res.party_code + ' — Server: ' + res.server.split('/').pop(), 'success');
-    log('Enter this code on your phone, then click START to launch bots on the same server.', 'info');
-  } else {
-    log('Failed to create party: ' + (res ? res.error : 'no response'), 'error');
-  }
-  $('btnCreateParty').disabled = false;
-}
-
 async function startBots() {
   const region = $region.value;
   const ip = $ip.value.trim();
-  if (!region && !ip && !createdPartyServer) {
-    log('Select a region or create a party first!', 'error');
+  if (!region && !ip) {
+    log('Select a region first!', 'error');
     return;
   }
 
   const count = $count.value;
   const party = $party.value.trim();
-  let targetip = region ? undefined : ip;
+  const nick = $nickname.value.trim();
+  const targetip = region ? undefined : ip;
 
-  // If a party was created via our server, use that exact server
-  if (createdPartyServer && party) {
-    targetip = createdPartyServer;
-    log('Using party server: ' + createdPartyServer.replace('wss://', '').split('/').pop(), 'info');
+  if (party && !nick) {
+    log('Enter your in-game nickname so we can find your server!', 'error');
+    return;
   }
 
-  const target = targetip || region || ip;
-  log('Starting ' + count + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
+  const target = targetip || region;
+  const info = party ? ' (party: ' + party + ', scanning for: ' + nick + ')' : '';
+  log('Starting ' + count + ' bots on ' + target + info + '...', 'info');
+  if (party) log('Scanning all servers in region to find you — make sure you are IN GAME...', 'info');
 
   const res = await apiPost('/botter2.php', {
     action: 'start',
     session_id: sessionId,
-    targetip: targetip || (region ? undefined : ip),
-    region: targetip ? undefined : (region || undefined),
+    targetip: targetip,
+    region: region || undefined,
     mode: $mode.value,
     game_mode: $gameMode.value,
     bot_name: $name.value,
     bot_count: count,
     party_code: party || undefined,
+    nickname: nick || undefined,
   });
 
   if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
+    if (party && res.player_found) {
+      log('FOUND YOU! All ' + (res.bots_started || count) + ' bots sent to your server!', 'success');
+    } else if (party && !res.player_found) {
+      log('Could not find "' + nick + '" — bots scattered across ' + (res.servers_scanning || '?') + ' servers. Make sure you are in-game!', 'warn');
+    } else {
+      log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
+    }
     startPolling();
   } else {
     log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');
