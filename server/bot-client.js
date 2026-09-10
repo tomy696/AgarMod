@@ -37,6 +37,7 @@ class BotClient extends EventEmitter {
     this.cellsIDs = [];
     this.isAlive = false;
     this.entities = {};
+    this.leaderboardNames = [];
     this.offsetX = 0;
     this.offsetY = 0;
 
@@ -60,6 +61,7 @@ class BotClient extends EventEmitter {
     this.cellsIDs = [];
     this.isAlive = false;
     this.entities = {};
+    this.leaderboardNames = [];
     this.offsetX = 0;
     this.offsetY = 0;
 
@@ -170,7 +172,7 @@ class BotClient extends EventEmitter {
       case 32:  this._handleSpawnConfirm(buffer); break;
       case 85:  this._handleCaptchaFail(); break;
       case 255: this._handleCompressedData(buffer); break;
-      case 54:  break; // leaderboard
+      case 54:  this._handleLeaderboard(buffer); break;
       default:  break;
     }
   }
@@ -230,6 +232,24 @@ class BotClient extends EventEmitter {
     console.log(`[Bot ${this.id}] Spawned! cellId=${cellId}`);
     this.emit('gameJoined');
     this._startMoveLoop();
+  }
+
+  _handleLeaderboard(buffer) {
+    try {
+      const reader = new proto.Reader(buffer);
+      reader.readUint8(); // opcode 54
+      const count = reader.readUint32();
+      const names = [];
+      for (let i = 0; i < count && reader.byteOffset < reader.buffer.length; i++) {
+        const flags = reader.readUint8();
+        if (flags & 2) reader.byteOffset += 4;
+        const name = reader.readString();
+        if (name) names.push(name);
+        if (flags & 4) reader.byteOffset += 4;
+        if (flags & 8) reader.byteOffset += 4;
+      }
+      this.leaderboardNames = names;
+    } catch (_) {}
   }
 
   _handleCaptchaFail() {
@@ -515,6 +535,9 @@ class BotClient extends EventEmitter {
 
   hasPlayerNamed(name) {
     const lower = name.toLowerCase();
+    for (const n of this.leaderboardNames) {
+      if (n.toLowerCase() === lower) return true;
+    }
     for (const id in this.entities) {
       const e = this.entities[id];
       if (e.name && e.name.toLowerCase() === lower && !this.cellsIDs.includes(e.id)) {
@@ -526,6 +549,9 @@ class BotClient extends EventEmitter {
 
   getVisiblePlayerNames() {
     const names = new Set();
+    for (const n of this.leaderboardNames) {
+      if (n) names.add(n);
+    }
     for (const id in this.entities) {
       const e = this.entities[id];
       if (e.name && !this.cellsIDs.includes(e.id) && !e.isPellet) {

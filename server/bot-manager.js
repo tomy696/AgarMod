@@ -36,19 +36,27 @@ class BotManager {
    */
   async _scanForPlayer(region, partyCode, nickname) {
     const servers = new Set();
-    const scanCount = 20;
-    console.log(`[Scanner] Discovering servers in ${region} (${scanCount} queries)...`);
+    console.log(`[Scanner] Discovering servers in ${region} (party + ffa pools)...`);
 
-    for (let i = 0; i < scanCount; i++) {
+    for (let i = 0; i < 15; i++) {
+      try {
+        const { server } = await proto.findServer(region, ':party');
+        servers.add(server);
+      } catch (_) {}
+      if (i < 14) await new Promise(r => setTimeout(r, 250));
+    }
+    const partyCount = servers.size;
+
+    for (let i = 0; i < 10; i++) {
       try {
         const { server } = await proto.findServer(region, ':ffa');
         servers.add(server);
       } catch (_) {}
-      if (i < scanCount - 1) await new Promise(r => setTimeout(r, 250));
+      if (i < 9) await new Promise(r => setTimeout(r, 250));
     }
 
     const unique = [...servers];
-    console.log(`[Scanner] Found ${unique.length} unique servers, scanning for "${nickname}"...`);
+    console.log(`[Scanner] Found ${unique.length} unique servers (${partyCount} party + ${unique.length - partyCount} ffa), scanning for "${nickname}"...`);
 
     if (unique.length === 0) throw new Error('No servers found in region');
 
@@ -67,6 +75,7 @@ class BotManager {
       for (let i = 0; i < unique.length; i++) {
         const serverUrl = unique[i];
         const scoutUrl = `wss://${serverUrl}?party_id=${encodeURIComponent(partyCode)}`;
+        const shortName = serverUrl.split('/').pop() || serverUrl;
 
         const scout = new BotClient({
           id: 90000 + i,
@@ -76,38 +85,49 @@ class BotManager {
         });
         scouts.push(scout);
 
-        scout.on('gameJoined', () => {
+        const startCheck = () => {
           const iv = setInterval(() => {
             if (resolved) { clearInterval(iv); return; }
             if (scout.hasPlayerNamed(nickname)) {
-              console.log(`[Scanner] FOUND "${nickname}" on ${serverUrl}`);
+              console.log(`[Scanner] FOUND "${nickname}" on ${shortName}!`);
               resolved = true;
               cleanup();
               resolve(serverUrl);
             }
-          }, 400);
+          }, 300);
           checkIntervals.push(iv);
+        };
+
+        scout.on('connected', () => {
+          console.log(`[Scanner] Scout ${i} connected to ${shortName}`);
+          startCheck();
+        });
+
+        scout.on('gameJoined', () => {
+          console.log(`[Scanner] Scout ${i} spawned on ${shortName}, leaderboard: [${scout.leaderboardNames.join(', ')}]`);
         });
 
         scout.on('error', () => {});
 
-        const delay = i * 400;
+        const delay = i * 300;
         setTimeout(() => {
           if (!resolved) scout.connect(scoutUrl, null);
         }, delay);
       }
 
-      const totalTimeout = 8000 + unique.length * 400;
+      const totalTimeout = 15000 + unique.length * 300;
       setTimeout(() => {
         if (!resolved) {
           console.log(`[Scanner] Timeout — "${nickname}" not found on ${unique.length} servers`);
 
-          const names = new Set();
-          for (const s of scouts) {
-            for (const n of s.getVisiblePlayerNames()) names.add(n);
-          }
-          if (names.size > 0) {
-            console.log(`[Scanner] Visible players: ${[...names].slice(0, 20).join(', ')}`);
+          for (let i = 0; i < scouts.length; i++) {
+            const s = scouts[i];
+            const names = s.getVisiblePlayerNames();
+            const lb = s.leaderboardNames;
+            if (names.size > 0 || lb.length > 0) {
+              const shortName = unique[i].split('/').pop() || unique[i];
+              console.log(`[Scanner] Server ${shortName}: leaderboard=[${lb.join(',')}] entities=[${[...names].slice(0,10).join(',')}]`);
+            }
           }
 
           resolved = true;
@@ -160,7 +180,7 @@ class BotManager {
               console.log(`[BotManager] Player not found, falling back to scatter across all servers`);
               const servers = new Set();
               for (let i = 0; i < 15; i++) {
-                try { const { server } = await proto.findServer(targetIP, ':ffa'); servers.add(server); } catch (_) {}
+                try { const { server } = await proto.findServer(targetIP, ':party'); servers.add(server); } catch (_) {}
                 if (i < 14) await new Promise(r => setTimeout(r, 250));
               }
               const unique = [...servers];
@@ -172,7 +192,7 @@ class BotManager {
           } else {
             const servers = new Set();
             for (let i = 0; i < 15; i++) {
-              try { const { server } = await proto.findServer(targetIP, ':ffa'); servers.add(server); } catch (_) {}
+              try { const { server } = await proto.findServer(targetIP, ':party'); servers.add(server); } catch (_) {}
               if (i < 14) await new Promise(r => setTimeout(r, 250));
             }
             const unique = [...servers];
