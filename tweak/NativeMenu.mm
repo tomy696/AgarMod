@@ -245,6 +245,14 @@ static const CGFloat kBtnSize     = 42.0f;
     [_scrollView addSubview:botBtn];
     y += 48;
 
+    NSString *token = agmod_getPlayerToken();
+    if (token && token.length > 0) {
+        UILabel *tokLbl = [self labelAt:CGRectMake(pad, y, w - pad*2, 16) text:[NSString stringWithFormat:@"Token: %@", token] size:11 bold:YES];
+        tokLbl.textColor = [UIColor colorWithRed:0.55f green:0.30f blue:1.0f alpha:1.0f];
+        [_scrollView addSubview:tokLbl];
+        y += 18;
+    }
+
     NSString *serverIP = agmod_getCurrentServerIP();
     if (serverIP && serverIP.length > 0) {
         UILabel *ipLbl = [self labelAt:CGRectMake(pad, y, w - pad*2, 16) text:[NSString stringWithFormat:@"Server: %@", serverIP] size:10 bold:NO];
@@ -252,6 +260,17 @@ static const CGFloat kBtnSize     = 42.0f;
         [_scrollView addSubview:ipLbl];
         y += 18;
     }
+
+    UIButton *copyURLBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    copyURLBtn.frame = CGRectMake(pad, y, w - pad*2, 36);
+    copyURLBtn.layer.cornerRadius = 8;
+    copyURLBtn.backgroundColor = [UIColor colorWithRed:0.10f green:0.55f blue:0.25f alpha:1.0f];
+    [copyURLBtn setTitle:@"COPY TOKEN" forState:UIControlStateNormal];
+    [copyURLBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    copyURLBtn.titleLabel.font = [UIFont boldSystemFontOfSize:13];
+    [copyURLBtn addTarget:self action:@selector(copyServerURLTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_scrollView addSubview:copyURLBtn];
+    y += 42;
 
     [_scrollView addSubview:[self separatorAt:y width:w]];
     y += 8;
@@ -400,6 +419,32 @@ typedef void(^ToggleBlock)(BOOL on);
 - (void)resetTapped {
     agmod_reloadSettings();
     [self buildMenuContent];
+}
+
+- (void)copyServerURLTapped {
+    BOOL copied = agmod_copyGameServerURL();
+    UIViewController *vc = _hostWindow.rootViewController;
+    while (vc.presentedViewController) vc = vc.presentedViewController;
+
+    if (copied) {
+        NSString *token = agmod_getPlayerToken();
+        NSString *serverIP = agmod_getCurrentServerIP();
+        NSString *msg = [NSString stringWithFormat:@"Your token: %@\n\nPaste this on the dashboard.\nServer auto-reported%@.",
+            token, serverIP.length > 0 ? [NSString stringWithFormat:@" (%@)", serverIP] : @""];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Token Copied!"
+            message:msg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [vc presentViewController:alert animated:YES completion:^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                if (vc.presentedViewController == alert) [alert dismissViewControllerAnimated:YES completion:nil];
+            });
+        }];
+    } else {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+            message:@"Token not generated. Restart the app." preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+        [vc presentViewController:alert animated:YES completion:nil];
+    }
 }
 
 - (void)configTapped {

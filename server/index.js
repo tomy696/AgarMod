@@ -193,12 +193,12 @@ app.post('/botter2.php', async (req, res) => {
     targetip: targetIP,
     region,
     game_mode: gameMode,
+    game_server_url: gameServerUrl,
     mode = 'follow',
     bot_name: botName = 'Bot',
     bot_count: botCountRaw = '1',
     party_code: partyCode,
     party,
-    nickname,
     player_state: playerState,
     target_x: targetXRaw = '0',
     target_y: targetYRaw = '0',
@@ -208,8 +208,8 @@ app.post('/botter2.php', async (req, res) => {
   const botCount = parseInt(botCountRaw, 10) || 1;
   const targetX = parseFloat(targetXRaw) || 0;
   const targetY = parseFloat(targetYRaw) || 0;
-  const code = partyCode || party || undefined;
-  const resolvedIP = targetIP || REGION_TO_SERVER[region] || '';
+  const code = gameServerUrl ? undefined : (partyCode || party || undefined);
+  const resolvedIP = gameServerUrl || targetIP || REGION_TO_SERVER[region] || '';
 
   if (!sessionId) {
     return res.json({
@@ -234,7 +234,7 @@ app.post('/botter2.php', async (req, res) => {
         });
       }
 
-      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'}, nickname: ${nickname || 'none'})`);
+      console.log(`[Botter] Starting ${botCount} bots on ${resolvedIP} (region: ${region || 'custom'}, mode: ${mode}, gameMode: ${gameMode || 'ffa'}, party: ${code || 'none'}${gameServerUrl ? ', via token' : ''})`);
 
       const result = await botManager.startBots({
         sessionId,
@@ -244,7 +244,6 @@ app.post('/botter2.php', async (req, res) => {
         botName,
         botCount,
         partyCode: code,
-        nickname: nickname || undefined,
         targetX,
         targetY,
       });
@@ -500,6 +499,43 @@ app.get('/debug/mobile', async (req, res) => {
       error: err.message,
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Token → Server URL mapping (IPA auto-reports, dashboard resolves)
+// ---------------------------------------------------------------------------
+
+const tokenStore = new Map(); // token -> { serverUrl, updatedAt }
+const TOKEN_TTL = 30 * 60 * 1000; // 30 min
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [tok, entry] of tokenStore) {
+    if (now - entry.updatedAt > TOKEN_TTL) tokenStore.delete(tok);
+  }
+}, 60 * 1000);
+
+app.post('/api/report-server', (req, res) => {
+  const { token, server_url } = req.body;
+  if (!token || !server_url) {
+    return res.json({ status: 'error', error: 'Missing token or server_url' });
+  }
+  tokenStore.set(token, { serverUrl: server_url, updatedAt: Date.now() });
+  console.log(`[Token] Stored: ${token.slice(0, 8)}... → ${server_url}`);
+  res.json({ status: 'ok' });
+});
+
+app.get('/api/resolve-token', (req, res) => {
+  const token = req.query.token || '';
+  const entry = tokenStore.get(token);
+  if (!entry) {
+    return res.json({ status: 'error', error: 'Token not found or expired' });
+  }
+  if (Date.now() - entry.updatedAt > TOKEN_TTL) {
+    tokenStore.delete(token);
+    return res.json({ status: 'error', error: 'Token expired' });
+  }
+  res.json({ status: 'ok', server_url: entry.serverUrl, age_seconds: Math.round((Date.now() - entry.updatedAt) / 1000) });
 });
 
 // ---------------------------------------------------------------------------

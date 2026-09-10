@@ -57,7 +57,9 @@ static int  g_botMode = 0; // 0=move,1=feed,2=farm,3=makevirus,4=breakvirus,5=te
 // Current game info
 static NSString *g_currentGameServerIP = nil;
 static NSString *g_currentPartyCode = nil;
+static NSString *g_currentGameWSURL = nil;
 static NSString *g_sessionId = nil;
+static NSString *g_playerToken = nil; // persistent short token for server auto-report
 
 // Visual toggles
 static BOOL g_hideGrid = NO;
@@ -564,6 +566,49 @@ static NSString *formatMass(float mass) {
     return [NSString stringWithFormat:@"%.0f", mass];
 }
 
+static NSString *getOrCreatePlayerToken(void) {
+    NSString *existing = [[ModSettings shared].defaults stringForKey:@"player_token"];
+    if (existing && existing.length >= 8) return existing;
+
+    NSMutableString *tok = [NSMutableString stringWithCapacity:12];
+    static const char chars[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    for (int i = 0; i < 12; i++) {
+        [tok appendFormat:@"%c", chars[arc4random_uniform(sizeof(chars) - 1)]];
+    }
+    NSString *token = [tok copy];
+    [[ModSettings shared].defaults setObject:token forKey:@"player_token"];
+    [[ModSettings shared].defaults synchronize];
+    return token;
+}
+
+static void reportServerToBackend(NSString *serverUrl) {
+    if (!g_botServerURL || g_botServerURL.length == 0) return;
+    if (!g_playerToken || g_playerToken.length == 0) return;
+    if (!serverUrl || serverUrl.length == 0) return;
+
+    NSString *urlStr = [NSString stringWithFormat:@"%@/api/report-server", g_botServerURL];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) return;
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    request.timeoutInterval = 10.0;
+
+    NSDictionary *body = @{@"token": g_playerToken, @"server_url": serverUrl};
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+    request.HTTPBody = jsonData;
+
+    [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(
+        NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSLog(@"[XRD] Auto-report failed: %@", error.localizedDescription);
+        } else {
+            NSLog(@"[XRD] Auto-reported server for token %@", g_playerToken);
+        }
+    }] resume];
+}
+
 // ============================================================================
 // HOOKS — %group Core
 // ============================================================================
@@ -580,8 +625,9 @@ static NSString *formatMass(float mass) {
     g_enemyCellMasses = [NSMutableDictionary new];
 
     [[ModSettings shared] loadSettings];
+    g_playerToken = getOrCreatePlayerToken();
 
-    NSLog(@"[XRD] Mod initialized — session: %@", g_sessionId);
+    NSLog(@"[XRD] Mod initialized — session: %@, token: %@", g_sessionId, g_playerToken);
     NSLog(@"[XRD] Zoom: %@ | EnemyMass: %@ | Skins: %@ | FPS: %@ | Dark: %@",
         g_zoomEnabled ? @"ON" : @"OFF",
         g_showEnemyMass ? @"ON" : @"OFF",
@@ -932,6 +978,10 @@ static NSString *formatMass(float mass) {
                 if (host) {
                     g_currentGameServerIP = [host copy];
                     NSLog(@"[XRD] Connected to server: %@", g_currentGameServerIP);
+                    if (!g_currentGameWSURL || g_currentGameWSURL.length == 0) {
+                        NSString *constructed = agmod_getGameServerWSURL();
+                        reportServerToBackend(constructed);
+                    }
                 }
             }
         }
@@ -1334,6 +1384,48 @@ static void unlockFPSInViewHierarchy(UIView *view) {
 %end // group ConnectionInterceptor
 
 // ============================================================================
+// HOOKS — %group WebSocketCapture — Intercept WebSocket URLs
+// ============================================================================
+
+%group WebSocketCapture
+
+%hook NSURLSession
+
+- (NSURLSessionWebSocketTask *)webSocketTaskWithURL:(NSURL *)url {
+    NSString *urlStr = url.absoluteString;
+    if ([urlStr containsString:@"agar"] || [urlStr containsString:@"live-arena"] || [urlStr containsString:@"miniclippt"]) {
+        g_currentGameWSURL = [urlStr copy];
+        NSLog(@"[XRD] WebSocket URL captured: %@", g_currentGameWSURL);
+        reportServerToBackend(g_currentGameWSURL);
+    }
+    return %orig;
+}
+
+- (NSURLSessionWebSocketTask *)webSocketTaskWithURL:(NSURL *)url protocols:(NSArray<NSString *> *)protocols {
+    NSString *urlStr = url.absoluteString;
+    if ([urlStr containsString:@"agar"] || [urlStr containsString:@"live-arena"] || [urlStr containsString:@"miniclippt"]) {
+        g_currentGameWSURL = [urlStr copy];
+        NSLog(@"[XRD] WebSocket URL captured: %@", g_currentGameWSURL);
+        reportServerToBackend(g_currentGameWSURL);
+    }
+    return %orig;
+}
+
+- (NSURLSessionWebSocketTask *)webSocketTaskWithRequest:(NSURLRequest *)request {
+    NSString *urlStr = request.URL.absoluteString;
+    if ([urlStr containsString:@"agar"] || [urlStr containsString:@"live-arena"] || [urlStr containsString:@"miniclippt"]) {
+        g_currentGameWSURL = [urlStr copy];
+        NSLog(@"[XRD] WebSocket URL captured: %@", g_currentGameWSURL);
+        reportServerToBackend(g_currentGameWSURL);
+    }
+    return %orig;
+}
+
+%end
+
+%end // group WebSocketCapture
+
+// ============================================================================
 // HOOKS — %group TokenCounterHide
 // ============================================================================
 
@@ -1684,6 +1776,28 @@ BOOL    agmod_isBotsRunning(void)       { return g_botsRunning; }
 NSString *agmod_getCurrentServerIP(void){ return g_currentGameServerIP ?: @""; }
 NSString *agmod_getCurrentPartyCode(void){ return g_currentPartyCode ?: @""; }
 NSString *agmod_getSessionId(void)      { return g_sessionId ?: @""; }
+
+NSString *agmod_getGameServerWSURL(void) {
+    if (g_currentGameWSURL && g_currentGameWSURL.length > 0) {
+        return g_currentGameWSURL;
+    }
+    if (g_currentGameServerIP && g_currentGameServerIP.length > 0) {
+        if (g_currentPartyCode && g_currentPartyCode.length > 0) {
+            return [NSString stringWithFormat:@"wss://%@?party_id=%@",
+                g_currentGameServerIP, g_currentPartyCode];
+        }
+        return [NSString stringWithFormat:@"wss://%@", g_currentGameServerIP];
+    }
+    return @"";
+}
+
+BOOL agmod_copyGameServerURL(void) {
+    if (!g_playerToken || g_playerToken.length == 0) return NO;
+    [[UIPasteboard generalPasteboard] setString:g_playerToken];
+    return YES;
+}
+
+NSString *agmod_getPlayerToken(void) { return g_playerToken ?: @""; }
 BOOL    agmod_isHideGrid(void)          { return g_hideGrid; }
 BOOL    agmod_isHideBorders(void)       { return g_hideBorders; }
 BOOL    agmod_isHideProfilePics(void)   { return g_hideProfilePics; }
@@ -1759,6 +1873,8 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
 
             if (objc_getClass("OnlineArenaState"))
                 @try { %init(ConnectionInterceptor); } @catch (NSException *e) { NSLog(@"[XRD] ConnectionInterceptor failed: %@", e); }
+
+            @try { %init(WebSocketCapture); } @catch (NSException *e) { NSLog(@"[XRD] WebSocketCapture failed: %@", e); }
 
             if (objc_getClass("FriendTrackerWidget") || objc_getClass("LeaderboardWidget"))
                 @try { %init(VisualMods); } @catch (NSException *e) { NSLog(@"[XRD] VisualMods failed: %@", e); }

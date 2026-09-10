@@ -362,9 +362,9 @@
     </div>
 
     <div class="field">
-      <label>Your Nickname <span style="font-weight:400;color:var(--text2)">(your in-game name)</span></label>
-      <input type="text" id="nickname" placeholder="Your exact in-game name" autocomplete="off" maxlength="15">
-      <div style="margin-top:4px;font-size:11px;color:var(--text2)">Required to find your server. Must match exactly.</div>
+      <label>Server Token <span style="font-weight:400;color:var(--text2)">(from IPA mod menu)</span></label>
+      <input type="text" id="serverToken" placeholder="Paste token from COPY SERVER TOKEN" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12px">
+      <div style="margin-top:4px;font-size:11px;color:var(--text2)">Paste the token from your IPA. Bots join your exact server — no scanning needed.</div>
     </div>
   </div>
 
@@ -464,7 +464,7 @@ const $gameMode = $('gameMode');
 const $count = $('botCount');
 const $countLabel = $('botCountLabel');
 const $party = $('partyCode');
-const $nickname = $('nickname');
+const $serverToken = $('serverToken');
 const $statBots = $('statBots');
 const $statConn = $('statConnected');
 const $statInGame = $('statInGame');
@@ -600,45 +600,53 @@ async function testBouncer() {
 async function startBots() {
   const region = $region.value;
   const ip = $ip.value.trim();
-  if (!region && !ip) {
-    log('Select a region first!', 'error');
-    return;
-  }
-
+  const token = $serverToken.value.trim();
   const count = $count.value;
   const party = $party.value.trim();
-  const nick = $nickname.value.trim();
-  const targetip = region ? undefined : ip;
 
-  if (party && !nick) {
-    log('Enter your in-game nickname so we can find your server!', 'error');
+  if (!token && !region && !ip) {
+    log('Paste a server token or select a region!', 'error');
     return;
   }
 
-  const target = targetip || region;
-  const info = party ? ' (party: ' + party + ', scanning for: ' + nick + ')' : '';
-  log('Starting ' + count + ' bots on ' + target + info + '...', 'info');
-  if (party) log('Scanning all servers in region to find you — make sure you are IN GAME...', 'info');
-
-  const res = await apiPost('/botter2.php', {
+  const body = {
     action: 'start',
     session_id: sessionId,
-    targetip: targetip,
-    region: region || undefined,
     mode: $mode.value,
     game_mode: $gameMode.value,
     bot_name: $name.value,
     bot_count: count,
-    party_code: party || undefined,
-    nickname: nick || undefined,
-  });
+  };
+
+  if (token) {
+    if (token.startsWith('wss://') || token.startsWith('ws://')) {
+      body.game_server_url = token;
+      log('Starting ' + count + ' bots on server URL...', 'info');
+    } else {
+      log('Resolving token...', 'info');
+      const resolved = await apiGet('/api/resolve-token?token=' + encodeURIComponent(token));
+      if (!resolved || resolved.status !== 'ok') {
+        log('Token not found or expired. Make sure you are in a game!', 'error');
+        return;
+      }
+      body.game_server_url = resolved.server_url;
+      log('Token resolved! Server found (' + resolved.age_seconds + 's ago)', 'success');
+    }
+    log('Starting ' + count + ' bots on your server...', 'info');
+  } else {
+    body.targetip = region ? undefined : ip;
+    body.region = region || undefined;
+    body.party_code = party || undefined;
+    const target = body.targetip || region;
+    log('Starting ' + count + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
+  }
+
+  const res = await apiPost('/botter2.php', body);
 
   if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    if (party && res.player_found) {
-      log('FOUND YOU! All ' + (res.bots_started || count) + ' bots sent to your server!', 'success');
-    } else if (party && !res.player_found) {
-      log('Could not find "' + nick + '" — bots scattered across ' + (res.servers_scanning || '?') + ' servers. Make sure you are in-game!', 'warn');
+    if (token) {
+      log('All ' + (res.bots_started || count) + ' bots sent to your server!', 'success');
     } else {
       log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
     }
@@ -646,7 +654,6 @@ async function startBots() {
   } else {
     log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');
   }
-  // Fetch server logs after a delay to see connection attempts
   setTimeout(fetchServerLogs, 2000);
   setTimeout(fetchServerLogs, 5000);
   setTimeout(fetchServerLogs, 10000);
