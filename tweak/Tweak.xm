@@ -9,6 +9,7 @@
 #import <MetalKit/MetalKit.h>
 #import "headers/AgarIO.h"
 #import "NativeMenu.h"
+#import "ModAPI.h"
 
 // ============================================================================
 // GLOBAL STATE
