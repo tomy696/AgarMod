@@ -300,7 +300,6 @@
     <p>Agar.io bot management dashboard</p>
   </div>
   <div class="topnav-right">
-    <a class="nav-btn" onclick="testMobileAPI()">Test Mobile API</a>
     <a class="nav-btn" onclick="clearUID()">New Session</a>
   </div>
 </div>
@@ -312,11 +311,12 @@
     <h2>Bot Settings</h2>
 
     <div class="field">
-      <label>Secret Key</label>
+      <label>UID / Bot Key <span style="font-weight:400;color:var(--text2)">(from IPA — COPY CONSOLE ID)</span></label>
       <div class="input-row">
-        <input type="password" id="secretKey" placeholder="Any key (self-hosted)" autocomplete="off">
-        <button onclick="verifyKey()">Verify</button>
+        <input type="text" id="consoleId" placeholder="Paste your Console ID from the IPA" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12px">
+        <button onclick="verifyConsoleId()">Link</button>
       </div>
+      <div style="margin-top:4px;font-size:11px;color:var(--text2)">Open the IPA mod menu, tap COPY CONSOLE ID, paste it here.</div>
     </div>
 
     <div class="field">
@@ -332,18 +332,7 @@
         <option value="ap-northeast-1">AP (Tokyo)</option>
         <option value="ap-southeast-1">AP (Singapore)</option>
         <option value="me-south-1">ME (Turkey)</option>
-        <option value="">Custom IP</option>
       </select>
-    </div>
-
-    <div class="field" id="customIPGroup" hidden>
-      <label>Server IP</label>
-      <input type="text" id="targetIP" placeholder="wss://server.agario.miniclippt.com" autocomplete="off" spellcheck="false">
-    </div>
-
-    <div class="field">
-      <label>Bot Name</label>
-      <input type="text" id="botName" value="XRD" maxlength="15">
     </div>
 
     <div class="field">
@@ -357,14 +346,13 @@
     </div>
 
     <div class="field">
-      <label>Party Code <span style="font-weight:400;color:var(--text2)">(from your phone)</span></label>
-      <input type="text" id="partyCode" placeholder="Enter your party code (e.g. XFSAQ3)" autocomplete="off" style="text-transform:uppercase">
+      <label>Bot Name</label>
+      <input type="text" id="botName" value="XRD" maxlength="15">
     </div>
 
     <div class="field">
-      <label>Server Token <span style="font-weight:400;color:var(--text2)">(from IPA mod menu)</span></label>
-      <input type="text" id="serverToken" placeholder="Paste token from COPY SERVER TOKEN" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12px">
-      <div style="margin-top:4px;font-size:11px;color:var(--text2)">Paste the token from your IPA. Bots join your exact server — no scanning needed.</div>
+      <label>Party Code <span style="font-weight:400;color:var(--text2)">(from your game)</span></label>
+      <input type="text" id="partyCode" placeholder="Enter your party code (e.g. XFSAQ3)" autocomplete="off" style="text-transform:uppercase">
     </div>
   </div>
 
@@ -456,15 +444,13 @@ let activeLogTab = 'client';
 const $ = id => document.getElementById(id);
 
 const $region = $('region');
-const $customIPGroup = $('customIPGroup');
-const $ip = $('targetIP');
+const $consoleId = $('consoleId');
 const $name = $('botName');
 const $mode = $('botMode');
 const $gameMode = $('gameMode');
 const $count = $('botCount');
 const $countLabel = $('botCountLabel');
 const $party = $('partyCode');
-const $serverToken = $('serverToken');
 const $statBots = $('statBots');
 const $statConn = $('statConnected');
 const $statInGame = $('statInGame');
@@ -479,9 +465,9 @@ const $btnStart = $('btnStart');
 const $btnStop = $('btnStop');
 const $btnPause = $('btnPause');
 
-$region.onchange = () => {
-  $customIPGroup.hidden = $region.value !== '';
-};
+// Persist console ID in localStorage
+const savedConsoleId = localStorage.getItem('xrd_console_id');
+if (savedConsoleId) $consoleId.value = savedConsoleId;
 
 $count.oninput = () => { $countLabel.textContent = $count.value; };
 
@@ -543,13 +529,17 @@ async function apiGet(path) {
   catch (e) { return null; }
 }
 
-function verifyKey() {
-  const key = $('secretKey').value.trim();
-  if (!key) { log('Enter a key first.', 'error'); return; }
-  log('Verifying key...', 'info');
-  apiPost('/getsecretkey.php', { sk: key }).then(r => {
-    if (r && r.success) log('Key verified! Access granted.', 'success');
-    else log('Invalid key.', 'error');
+function verifyConsoleId() {
+  const id = $consoleId.value.trim();
+  if (!id) { log('Paste your Console ID from the IPA first.', 'error'); return; }
+  localStorage.setItem('xrd_console_id', id);
+  log('Checking Console ID: ' + id.slice(0, 8) + '...', 'info');
+  apiGet('/api/resolve-token?token=' + encodeURIComponent(id)).then(r => {
+    if (r && r.status === 'ok') {
+      log('Console ID linked! Server found (' + r.age_seconds + 's ago): ' + r.server_url, 'success');
+    } else {
+      log('Console ID saved. Start a game on the IPA so the server URL is reported.', 'warn');
+    }
   });
 }
 
@@ -598,16 +588,17 @@ async function testBouncer() {
 }
 
 async function startBots() {
+  const consoleId = $consoleId.value.trim();
   const region = $region.value;
-  const ip = $ip.value.trim();
-  const token = $serverToken.value.trim();
   const count = $count.value;
   const party = $party.value.trim();
 
-  if (!token && !region && !ip) {
-    log('Paste a server token or select a region!', 'error');
+  if (!consoleId && !region) {
+    log('Paste your Console ID or select a region!', 'error');
     return;
   }
+
+  if (consoleId) localStorage.setItem('xrd_console_id', consoleId);
 
   const body = {
     action: 'start',
@@ -616,40 +607,39 @@ async function startBots() {
     game_mode: $gameMode.value,
     bot_name: $name.value,
     bot_count: count,
+    party_code: party || undefined,
   };
 
-  if (token) {
-    if (token.startsWith('wss://') || token.startsWith('ws://')) {
-      body.game_server_url = token;
-      log('Starting ' + count + ' bots on server URL...', 'info');
+  if (consoleId) {
+    log('Resolving Console ID...', 'info');
+    const resolved = await apiGet('/api/resolve-token?token=' + encodeURIComponent(consoleId));
+    if (resolved && resolved.status === 'ok') {
+      body.game_server_url = resolved.server_url;
+      if (!body.party_code && resolved.party_code) {
+        body.party_code = resolved.party_code;
+      }
+      log('Console ID resolved! Server: ' + resolved.server_url.split('/').pop() + ' (' + resolved.age_seconds + 's ago)' + (resolved.party_code ? ' [party: ' + resolved.party_code + ']' : ''), 'success');
     } else {
-      log('Resolving token...', 'info');
-      const resolved = await apiGet('/api/resolve-token?token=' + encodeURIComponent(token));
-      if (!resolved || resolved.status !== 'ok') {
-        log('Token not found or expired. Make sure you are in a game!', 'error');
+      if (!region) {
+        log('Console ID not found. Make sure you are in a game with the IPA!', 'error');
         return;
       }
-      body.game_server_url = resolved.server_url;
-      log('Token resolved! Server found (' + resolved.age_seconds + 's ago)', 'success');
+      log('Console ID not resolved yet, using region + party code...', 'warn');
     }
-    log('Starting ' + count + ' bots on your server...', 'info');
+  }
+
+  if (!body.game_server_url) {
+    body.region = region;
+    log('Starting ' + count + ' bots in ' + region + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
   } else {
-    body.targetip = region ? undefined : ip;
-    body.region = region || undefined;
-    body.party_code = party || undefined;
-    const target = body.targetip || region;
-    log('Starting ' + count + ' bots on ' + target + (party ? ' (party: ' + party + ')' : '') + '...', 'info');
+    log('Starting ' + count + ' bots on your server...', 'info');
   }
 
   const res = await apiPost('/botter2.php', body);
 
   if (res && res.api_response && res.status === 'ok') {
     setState('running');
-    if (token) {
-      log('All ' + (res.bots_started || count) + ' bots sent to your server!', 'success');
-    } else {
-      log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
-    }
+    log('Started ' + (res.bots_started || count) + ' bots. Proxies: ' + (res.proxies_alive || 0) + ' alive.', 'success');
     startPolling();
   } else {
     log('Failed: ' + (res ? (res.text || JSON.stringify(res)) : 'no response'), 'error');

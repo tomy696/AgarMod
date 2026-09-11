@@ -62,7 +62,7 @@ NSString *agmod_getCurrentServerIP(void);
 NSString *agmod_getCurrentPartyCode(void);
 NSString *agmod_getSessionId(void);
 NSString *agmod_getGameServerWSURL(void);
-NSString *agmod_getPlayerToken(void);
+NSString *agmod_getConsoleId(void);
 BOOL     agmod_copyGameServerURL(void);
 BOOL     agmod_isHideGrid(void);
 BOOL     agmod_isHideBorders(void);

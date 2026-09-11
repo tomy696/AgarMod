@@ -208,7 +208,7 @@ app.post('/botter2.php', async (req, res) => {
   const botCount = parseInt(botCountRaw, 10) || 1;
   const targetX = parseFloat(targetXRaw) || 0;
   const targetY = parseFloat(targetYRaw) || 0;
-  const code = gameServerUrl ? undefined : (partyCode || party || undefined);
+  const code = partyCode || party || undefined;
   const resolvedIP = gameServerUrl || targetIP || REGION_TO_SERVER[region] || '';
 
   if (!sessionId) {
@@ -502,40 +502,40 @@ app.get('/debug/mobile', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Token → Server URL mapping (IPA auto-reports, dashboard resolves)
+// Console ID → Server URL mapping (IPA auto-reports, dashboard resolves)
 // ---------------------------------------------------------------------------
 
-const tokenStore = new Map(); // token -> { serverUrl, updatedAt }
-const TOKEN_TTL = 30 * 60 * 1000; // 30 min
+const consoleStore = new Map(); // consoleId -> { serverUrl, updatedAt }
+const CONSOLE_TTL = 30 * 60 * 1000; // 30 min
 
 setInterval(() => {
   const now = Date.now();
-  for (const [tok, entry] of tokenStore) {
-    if (now - entry.updatedAt > TOKEN_TTL) tokenStore.delete(tok);
+  for (const [id, entry] of consoleStore) {
+    if (now - entry.updatedAt > CONSOLE_TTL) consoleStore.delete(id);
   }
 }, 60 * 1000);
 
 app.post('/api/report-server', (req, res) => {
-  const { token, server_url } = req.body;
+  const { token, server_url, party_code } = req.body;
   if (!token || !server_url) {
-    return res.json({ status: 'error', error: 'Missing token or server_url' });
+    return res.json({ status: 'error', error: 'Missing console ID or server_url' });
   }
-  tokenStore.set(token, { serverUrl: server_url, updatedAt: Date.now() });
-  console.log(`[Token] Stored: ${token.slice(0, 8)}... → ${server_url}`);
+  consoleStore.set(token, { serverUrl: server_url, partyCode: party_code || '', updatedAt: Date.now() });
+  console.log(`[Console] Stored: ${token.slice(0, 8)}... → ${server_url}${party_code ? ' (party: ' + party_code + ')' : ''}`);
   res.json({ status: 'ok' });
 });
 
 app.get('/api/resolve-token', (req, res) => {
   const token = req.query.token || '';
-  const entry = tokenStore.get(token);
+  const entry = consoleStore.get(token);
   if (!entry) {
-    return res.json({ status: 'error', error: 'Token not found or expired' });
+    return res.json({ status: 'error', error: 'Console ID not found or expired' });
   }
-  if (Date.now() - entry.updatedAt > TOKEN_TTL) {
-    tokenStore.delete(token);
-    return res.json({ status: 'error', error: 'Token expired' });
+  if (Date.now() - entry.updatedAt > CONSOLE_TTL) {
+    consoleStore.delete(token);
+    return res.json({ status: 'error', error: 'Console ID expired' });
   }
-  res.json({ status: 'ok', server_url: entry.serverUrl, age_seconds: Math.round((Date.now() - entry.updatedAt) / 1000) });
+  res.json({ status: 'ok', server_url: entry.serverUrl, party_code: entry.partyCode || '', age_seconds: Math.round((Date.now() - entry.updatedAt) / 1000) });
 });
 
 // ---------------------------------------------------------------------------

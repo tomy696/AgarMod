@@ -59,7 +59,7 @@ static NSString *g_currentGameServerIP = nil;
 static NSString *g_currentPartyCode = nil;
 static NSString *g_currentGameWSURL = nil;
 static NSString *g_sessionId = nil;
-static NSString *g_playerToken = nil; // persistent short token for server auto-report
+static NSString *g_consoleId = nil; // Miniclip UUID or generated fallback — used as Console ID for bot server
 
 // Visual toggles
 static BOOL g_hideGrid = NO;
@@ -566,24 +566,19 @@ static NSString *formatMass(float mass) {
     return [NSString stringWithFormat:@"%.0f", mass];
 }
 
-static NSString *getOrCreatePlayerToken(void) {
-    NSString *existing = [[ModSettings shared].defaults stringForKey:@"player_token"];
+static NSString *getOrCreateConsoleId(void) {
+    NSString *existing = [[ModSettings shared].defaults stringForKey:@"console_id"];
     if (existing && existing.length >= 8) return existing;
 
-    NSMutableString *tok = [NSMutableString stringWithCapacity:12];
-    static const char chars[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    for (int i = 0; i < 12; i++) {
-        [tok appendFormat:@"%c", chars[arc4random_uniform(sizeof(chars) - 1)]];
-    }
-    NSString *token = [tok copy];
-    [[ModSettings shared].defaults setObject:token forKey:@"player_token"];
+    NSString *consoleId = [[NSUUID UUID] UUIDString];
+    [[ModSettings shared].defaults setObject:consoleId forKey:@"console_id"];
     [[ModSettings shared].defaults synchronize];
-    return token;
+    return consoleId;
 }
 
 static void reportServerToBackend(NSString *serverUrl) {
     if (!g_botServerURL || g_botServerURL.length == 0) return;
-    if (!g_playerToken || g_playerToken.length == 0) return;
+    if (!g_consoleId || g_consoleId.length == 0) return;
     if (!serverUrl || serverUrl.length == 0) return;
 
     NSString *urlStr = [NSString stringWithFormat:@"%@/api/report-server", g_botServerURL];
@@ -595,7 +590,7 @@ static void reportServerToBackend(NSString *serverUrl) {
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
     request.timeoutInterval = 10.0;
 
-    NSDictionary *body = @{@"token": g_playerToken, @"server_url": serverUrl};
+    NSDictionary *body = @{@"token": g_consoleId, @"server_url": serverUrl, @"party_code": g_currentPartyCode ?: @""};
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
     request.HTTPBody = jsonData;
 
@@ -604,7 +599,7 @@ static void reportServerToBackend(NSString *serverUrl) {
         if (error) {
             NSLog(@"[XRD] Auto-report failed: %@", error.localizedDescription);
         } else {
-            NSLog(@"[XRD] Auto-reported server for token %@", g_playerToken);
+            NSLog(@"[XRD] Auto-reported server for console ID %@", g_consoleId);
         }
     }] resume];
 }
@@ -625,9 +620,9 @@ static void reportServerToBackend(NSString *serverUrl) {
     g_enemyCellMasses = [NSMutableDictionary new];
 
     [[ModSettings shared] loadSettings];
-    g_playerToken = getOrCreatePlayerToken();
+    g_consoleId = getOrCreateConsoleId();
 
-    NSLog(@"[XRD] Mod initialized — session: %@, token: %@", g_sessionId, g_playerToken);
+    NSLog(@"[XRD] Mod initialized — session: %@, console ID: %@", g_sessionId, g_consoleId);
     NSLog(@"[XRD] Zoom: %@ | EnemyMass: %@ | Skins: %@ | FPS: %@ | Dark: %@",
         g_zoomEnabled ? @"ON" : @"OFF",
         g_showEnemyMass ? @"ON" : @"OFF",
@@ -1000,12 +995,42 @@ static void reportServerToBackend(NSString *serverUrl) {
     if (code && code.length > 0) {
         g_currentPartyCode = [code copy];
         NSLog(@"[XRD] Party code captured: %@", g_currentPartyCode);
+
+        // Re-report so the backend gets the party code even when the party is
+        // created/joined mid-game, after the WebSocket already reported empty.
+        NSString *serverUrl = (g_currentGameWSURL && g_currentGameWSURL.length > 0)
+            ? g_currentGameWSURL
+            : agmod_getGameServerWSURL();
+        reportServerToBackend(serverUrl);
     }
 }
 
 %end
 
 %end // group ServerLoader
+
+// ============================================================================
+// HOOKS — %group UserCapture — Capture Miniclip UUID as Console ID
+// ============================================================================
+
+%group UserCapture
+
+%hook UserInfo
+
+- (NSString *)userId {
+    NSString *uid = %orig;
+    if (uid && uid.length > 0 && ![uid isEqualToString:g_consoleId]) {
+        g_consoleId = [uid copy];
+        [[ModSettings shared].defaults setObject:uid forKey:@"console_id"];
+        [[ModSettings shared].defaults synchronize];
+        NSLog(@"[XRD] Console ID updated from Miniclip UUID: %@", g_consoleId);
+    }
+    return uid;
+}
+
+%end
+
+%end // group UserCapture
 
 // ============================================================================
 // HOOKS — %group FastMode
@@ -1792,12 +1817,12 @@ NSString *agmod_getGameServerWSURL(void) {
 }
 
 BOOL agmod_copyGameServerURL(void) {
-    if (!g_playerToken || g_playerToken.length == 0) return NO;
-    [[UIPasteboard generalPasteboard] setString:g_playerToken];
+    if (!g_consoleId || g_consoleId.length == 0) return NO;
+    [[UIPasteboard generalPasteboard] setString:g_consoleId];
     return YES;
 }
 
-NSString *agmod_getPlayerToken(void) { return g_playerToken ?: @""; }
+NSString *agmod_getConsoleId(void) { return g_consoleId ?: @""; }
 BOOL    agmod_isHideGrid(void)          { return g_hideGrid; }
 BOOL    agmod_isHideBorders(void)       { return g_hideBorders; }
 BOOL    agmod_isHideProfilePics(void)   { return g_hideProfilePics; }
@@ -1870,6 +1895,9 @@ BOOL    agmod_isHideTokenCounter(void)  { return g_hideTokenCounter; }
 
             if (objc_getClass("OnlineArenaState"))
                 @try { %init(ServerLoader); } @catch (NSException *e) { NSLog(@"[XRD] ServerLoader failed: %@", e); }
+
+            if (objc_getClass("UserInfo"))
+                @try { %init(UserCapture); } @catch (NSException *e) { NSLog(@"[XRD] UserCapture failed: %@", e); }
 
             if (objc_getClass("OnlineArenaState"))
                 @try { %init(ConnectionInterceptor); } @catch (NSException *e) { NSLog(@"[XRD] ConnectionInterceptor failed: %@", e); }

@@ -171,7 +171,22 @@ class BotManager {
           const nickname = config.nickname;
           console.log(`[BotManager] Joining party: code=${partyCode}, region=${targetIP}, nickname=${nickname || 'none'}`);
 
-          if (nickname) {
+          // Parties are server-local: a party_id only works on the exact server
+          // that created it. getToken resolves that server deterministically.
+          // The nickname-scan and scatter paths below are fallbacks if it fails.
+          let partyServer = null;
+          try {
+            const res = await proto.getPartyServer(targetIP, partyCode);
+            if (res && res.server) partyServer = res.server;
+          } catch (err) {
+            console.log(`[BotManager] getPartyServer failed (${err.message}), falling back to scan/scatter`);
+          }
+
+          if (partyServer) {
+            config._playerFound = true;
+            console.log(`[BotManager] Party server resolved! All ${count} bots → ${partyServer}`);
+            resolvedUrl = `wss://${partyServer}?party_id=${encodeURIComponent(partyCode)}`;
+          } else if (nickname) {
             const foundServer = await this._scanForPlayer(targetIP, partyCode, nickname);
             if (foundServer) {
               config._playerFound = true;
@@ -327,7 +342,7 @@ class BotManager {
         const delay = i * (300 + Math.random() * 200);
         setTimeout(() => {
           if (this.sessions.has(sessionId) && session.bots.has(botId) && !session.paused) {
-            bot.connect(session.config.targetIP, proxy);
+            bot.connect(bot._assignedUrl || session.config.resolvedUrl || session.config.targetIP, proxy);
           }
         }, delay);
         resumed++;
