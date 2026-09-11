@@ -118,10 +118,11 @@ static const CGFloat kBtnSize     = 44.0f;
     if (_menuOpen) return;
 
     switch (pinch.state) {
-        case UIGestureRecognizerStateBegan:
+        case UIGestureRecognizerStateBegan: {
             _pinchBaseZoom = agmod_getFlexZoom();
             _zoomHUD.alpha = 1.0f;
             break;
+        }
 
         case UIGestureRecognizerStateChanged: {
             float scale = pinch.scale;
@@ -136,11 +137,12 @@ static const CGFloat kBtnSize     = 44.0f;
         }
 
         case UIGestureRecognizerStateEnded:
-        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateCancelled: {
             [UIView animateWithDuration:0.6 delay:0.4 options:0 animations:^{
                 self->_zoomHUD.alpha = 0;
             } completion:nil];
             break;
+        }
 
         default:
             break;
